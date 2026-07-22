@@ -55,6 +55,10 @@ view_config() {
     fi
 
     local ss_in ssp ssw ssm user_info
+    local vless_in vp vu venc vmode vmethod vrtt vticket venc_uri
+    local vless_link saved_mode
+    local socks_in sp su sw
+
     ss_in="$(jq -c --arg tag "$SS_TAG" '.inbounds[]? | select(.tag == $tag)' "$CONFIG_FILE" 2>/dev/null)"
     if [[ -n "$ss_in" ]]; then
         ssp="$(echo "$ss_in" | jq -r '.port')"
@@ -74,7 +78,6 @@ view_config() {
         fi
     fi
 
-    local vless_in vp vu venc vmode vmethod vrtt vticket venc_uri
     vless_in="$(jq -c --arg tag "$VLESS_TAG" '.inbounds[]? | select(.tag == $tag)' "$CONFIG_FILE" 2>/dev/null)"
     if [[ -n "$vless_in" ]]; then
         vp="$(echo "$vless_in" | jq -r '.port')"
@@ -97,12 +100,31 @@ view_config() {
         else
             echo -e "客户端 encryption: ${venc}"
             venc_uri="$(url_encode "$venc")"
-            [[ -n "$IPV4_HOST" ]] && echo -e "IPv4链接: vless://${vu}@${IPV4_HOST}:${vp}?type=tcp&security=none&encryption=${venc_uri}#VLESS-ENC-IPv4"
+            VLESS_PORT="$vp"
+            VLESS_UUID="$vu"
+            VLESS_ENCRYPTION="$venc"
+            saved_mode="${CURRENT_LINK_VIEW_MODE:-$mode}"
+            if [[ -n "$IPV4_HOST" && "$mode" != "ipv6" ]]; then
+                CURRENT_LINK_VIEW_MODE="ipv4"
+                vless_link="$(build_vless_enc_share_link 2>/dev/null || true)"
+                if [[ -n "$vless_link" ]]; then
+                    echo -e "IPv4链接: ${vless_link}"
+                else
+                    echo -e "IPv4链接: vless://${vu}@${IPV4_HOST}:${vp}?type=tcp&security=none&encryption=${venc_uri}#VLESS-ENC-IPv4"
+                fi
+            fi
             if should_print_ipv6_link "$mode" "$VLESS_TAG" "vless_encryption"; then
-                echo -e "IPv6链接: vless://${vu}@${IPV6_HOST}:${vp}?type=tcp&security=none&encryption=${venc_uri}#VLESS-ENC-IPv6"
+                CURRENT_LINK_VIEW_MODE="ipv6"
+                vless_link="$(build_vless_enc_share_link 2>/dev/null || true)"
+                if [[ -n "$vless_link" ]]; then
+                    echo -e "IPv6链接: ${vless_link}"
+                else
+                    echo -e "IPv6链接: vless://${vu}@${IPV6_HOST}:${vp}?type=tcp&security=none&encryption=${venc_uri}#VLESS-ENC-IPv6"
+                fi
             elif [[ "$mode" == "ipv6" ]]; then
                 print_ipv6_status_hint "$VLESS_TAG" "vless_encryption"
             fi
+            CURRENT_LINK_VIEW_MODE="$saved_mode"
         fi
     fi
 
@@ -115,7 +137,6 @@ view_config() {
     print_advanced_profile_result "fullstack"
     print_hysteria2_result
 
-    local socks_in sp su sw
     socks_in="$(jq -c --arg tag "$SOCKS_TAG" '.inbounds[]? | select(.tag == $tag)' "$CONFIG_FILE" 2>/dev/null)"
     if [[ -n "$socks_in" ]]; then
         sp="$(echo "$socks_in" | jq -r '.port')"

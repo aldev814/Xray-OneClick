@@ -19,7 +19,7 @@
 ## 升级
 
 ```bash
-curl -fsSL -o /root/install.sh https://raw.githubusercontent.com/ike-sh/Xray-OneClick/main/install.sh
+curl -fsSL -o /root/install.sh https://raw.githubusercontent.com/aldev814/Xray-OneClick/main/install.sh
 bash /root/install.sh
 ```
 

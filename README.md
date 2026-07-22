@@ -4,11 +4,11 @@ Xray-OneClick 是基于 **Xray-core** 的多协议一键部署脚本，适合在
 
 脚本支持 Shadowsocks 2022、VLESS Encryption、VLESS TCP REALITY、VLESS Encryption + XHTTP + FinalMask、VLESS Encryption + XHTTP、VLESS Encryption + FinalMask（sudoku）、SOCKS5、Hysteria2，以及高级协议组合与 Tunnel 中转管理。默认带基础安全屏蔽、配置备份、服务诊断、配置导出、Xray-core 升级和安全卸载能力，并提供 stable / prerelease 两条 Xray-core 通道。
 
-当前版本：**1.1.21**（与 `VERSION` / `ike version` 一致）
+当前版本：**1.1.22**（与 `VERSION` / `ike version` 一致）
 
 状态：正式版
 
-说明：1.1.21 为健壮性补丁：SOCKS5 安装/状态写入由 `jq … && mv` 改为严谨写法（jq 失败即报错回滚，不再静默误报成功）；修复 CLI 取值类 `--flag` 置于命令末尾且缺省值时 `shift 2` 导致的参数解析死循环（改为 `shift; shift`，缺值时回落到交互/默认值）；并完成全仓逐文件 BUG 走查。1.1.20 修复了一个会导致 **Alpine 安装直接失败的关键 BUG**：`detect_arch` 之前在 Alpine 上拼接 `-musl` 后缀去下载 `Xray-linux-64-musl.zip`，但官方 XTLS/Xray-core 根本不发布 `-musl` 包（Linux 构建为 `CGO_ENABLED=0` 静态 Go 二进制，在 musl/glibc 上均可直接运行），导致 Alpine 下载不到资产而安装失败；现统一使用官方标准包（如 `Xray-linux-64.zip`）。1.1.19 将引导脚本改为 POSIX `sh`（Alpine 自动 `apk add bash`）、放行 `preflight` 更多架构、OpenRC `need net` 改 `use net`。版本来源：官方 XTLS/Xray-core，默认安装 `latest`（当前 v26.3.27）；VLESS Encryption / FinalMask(sudoku) / Hysteria2 等高级特性需 Xray-core v26+。普通 VLESS TCP REALITY 默认使用 `xtls-rprx-vision`；高级 Reality 组合默认不启用 Vision flow，可按需用 `--flow vision` 试验开启。
+说明：1.1.22 新增 `ike export links` / `ike links` 直接输出分享 URI；Reality 系链接 fingerprint 默认改为 `firefox`；仓库地址统一为 `aldev814/Xray-OneClick`。1.1.21 为健壮性补丁：SOCKS5 安装/状态写入由 `jq … && mv` 改为严谨写法（jq 失败即报错回滚，不再静默误报成功）；修复 CLI 取值类 `--flag` 置于命令末尾且缺省值时 `shift 2` 导致的参数解析死循环（改为 `shift; shift`，缺值时回落到交互/默认值）；并完成全仓逐文件 BUG 走查。1.1.20 修复了一个会导致 **Alpine 安装直接失败的关键 BUG**：`detect_arch` 之前在 Alpine 上拼接 `-musl` 后缀去下载 `Xray-linux-64-musl.zip`，但官方 XTLS/Xray-core 根本不发布 `-musl` 包（Linux 构建为 `CGO_ENABLED=0` 静态 Go 二进制，在 musl/glibc 上均可直接运行），导致 Alpine 下载不到资产而安装失败；现统一使用官方标准包（如 `Xray-linux-64.zip`）。1.1.19 将引导脚本改为 POSIX `sh`（Alpine 自动 `apk add bash`）、放行 `preflight` 更多架构、OpenRC `need net` 改 `use net`。版本来源：官方 XTLS/Xray-core，默认安装 `latest`（当前 v26.3.27）；VLESS Encryption / FinalMask(sudoku) / Hysteria2 等高级特性需 Xray-core v26+。普通 VLESS TCP REALITY 默认使用 `xtls-rprx-vision`；高级 Reality 组合默认不启用 Vision flow，可按需用 `--flow vision` 试验开启。
 
 ## 功能特性
 
@@ -64,13 +64,13 @@ ike preflight
 Debian / Ubuntu / RHEL 系（有 sudo）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ike-sh/Xray-OneClick/main/scripts/bootstrap.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/aldev814/Xray-OneClick/main/scripts/bootstrap.sh | sudo sh
 ```
 
 Alpine 或已是 root：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ike-sh/Xray-OneClick/main/scripts/bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/aldev814/Xray-OneClick/main/scripts/bootstrap.sh | sh
 ```
 
 > 说明：Alpine 默认没有 bash 与 sudo。请直接以 root 运行 `| sh`（不要加 sudo）；如系统有 `wget` 没 `curl`，也可用 `wget -qO- <url> | sh`。
@@ -78,7 +78,7 @@ curl -fsSL https://raw.githubusercontent.com/ike-sh/Xray-OneClick/main/scripts/b
 或传统方式：
 
 ```bash
-curl -fsSL -o /root/install.sh https://raw.githubusercontent.com/ike-sh/Xray-OneClick/main/install.sh
+curl -fsSL -o /root/install.sh https://raw.githubusercontent.com/aldev814/Xray-OneClick/main/install.sh
 chmod +x /root/install.sh
 bash /root/install.sh
 ```
@@ -111,7 +111,7 @@ ike doctor all
 
 ```bash
 export XRAY_GITHUB_MIRRORS="https://gh.llkk.cc/,https://gh.ddlc.top/,https://gh-proxy.com/,https://ghproxy.net/"
-curl -fsSL -o /root/install.sh https://raw.githubusercontent.com/ike-sh/Xray-OneClick/main/install.sh
+curl -fsSL -o /root/install.sh https://raw.githubusercontent.com/aldev814/Xray-OneClick/main/install.sh
 chmod +x /root/install.sh
 bash /root/install.sh
 ```
@@ -197,6 +197,9 @@ ike smoke fullstack
 ike smoke all
 ike export clients --output /root/xray-clients.txt
 ike export report --output /root/xray-report.txt
+ike export links
+ike links
+ike links ipv4
 ```
 
 `doctor` 用于检查环境、配置和状态；`smoke` 用于服务侧快速排障。`smoke` 默认不会重启服务，只有加 `--restart` 时才会重启：
@@ -215,7 +218,7 @@ bash tests/test_config_generation.sh
 
 测试会覆盖普通 Reality、XHTTP FinalMask on/off、高级 Reality 组合、FullStack 和 `--fallback-limit conservative`。如果环境中存在 `xray`，测试会自动执行 `xray run -test -config <config>`；没有 `xray` 时会明确输出 skip 原因。
 
-`ike view` 和 `ike export clients` 会输出客户端连接信息，不要公开分享完整输出。
+`ike view` 和 `ike export clients` 会输出客户端连接信息，不要公开分享完整输出。若只需纯分享 URI（一行一条），使用 `ike links` 或 `ike export links`。
 
 ## Shadowsocks 2022
 
@@ -280,7 +283,7 @@ ike reality remove
 - Reality target：`127.0.0.1:<defender_port>`
 - defender 目标：`SNI:443`
 - Flow：`xtls-rprx-vision`
-- Fingerprint：`chrome`
+- Fingerprint：`firefox`
 - 默认生成 8 个 shortId
 
 Reality 使用 `xray x25519` 生成密钥。新版 Xray 可能输出 `PrivateKey`、`Password`、`Password (PublicKey)`、`Hash32` 等字段；脚本会将 `PrivateKey` 写入服务端配置，将 `PublicKey` / `Password` / `Password (PublicKey)` 作为客户端 `pbk`。
@@ -669,13 +672,21 @@ ike smoke all
 ike export clients --output /root/xray-clients.txt
 ```
 
+仅导出分享链接（一行一条 URI，适合直接导入客户端）：
+
+```bash
+ike links
+ike links ipv4
+ike export links --output /root/xray-links.txt
+```
+
 导出脱敏诊断报告：
 
 ```bash
 ike export report --output /root/xray-report.txt
 ```
 
-导出文件会尝试设置为 `600` 权限。`export report` 会脱敏 `privateKey`、`decryption`、password、token、secret 等敏感字段；`export clients` 只输出客户端需要的链接和参数。
+导出文件会尝试设置为 `600` 权限。`export report` 会脱敏 `privateKey`、`decryption`、password、token、secret 等敏感字段；`export clients` 输出完整客户端参数；`export links` / `ike links` 只输出分享 URI。
 
 ## Xray-core 管理
 

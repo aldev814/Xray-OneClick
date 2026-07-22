@@ -4,7 +4,7 @@
 set -o pipefail
 
 IKE_INSTALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IKE_LIB_RAW_BASE="${IKE_LIB_RAW_BASE:-https://raw.githubusercontent.com/ike-sh/Xray-OneClick/main/lib}"
+IKE_LIB_RAW_BASE="${IKE_LIB_RAW_BASE:-https://raw.githubusercontent.com/aldev814/Xray-OneClick/main/lib}"
 IKE_LIB_MODULES=(
     "00-bootstrap.sh"
     "01-constants.sh"
@@ -89,7 +89,7 @@ main() {
             show_version
             return 0
             ;;
-        "" | preflight | view | doctor | smoke | export | xray | migrate | uninstall | update | backup | endpoint | config | service | logs | cnblock | safety | tunnel | forward | reality | xhttp | enc-finalmask | enc-xhttp | hysteria2 | xhttp-reality | enc-reality | fullstack | bootstrap | test-config-generate) ;;
+        "" | preflight | view | doctor | smoke | export | links | link | xray | migrate | uninstall | update | backup | endpoint | config | service | logs | cnblock | safety | tunnel | forward | reality | xhttp | enc-finalmask | enc-xhttp | hysteria2 | xhttp-reality | enc-reality | fullstack | bootstrap | test-config-generate) ;;
         *)
             err "[失败] 未知命令: $1"
             echo "运行 ike help 查看可用命令。"
@@ -151,6 +151,10 @@ main() {
         export)
             shift
             run_export_command "$@"
+            ;;
+        links | link)
+            shift
+            run_export_command links "$@"
             ;;
         update)
             update_xray_core

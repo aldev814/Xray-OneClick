@@ -463,7 +463,7 @@ build_advanced_share_link() {
         path_uri="$(url_encode "$path")"
         printf '&path=%s' "$path_uri"
     fi
-    printf '&pbk=%s&fp=chrome&sni=%s&sid=%s&spx=%s' "$pbk_uri" "$sni_uri" "$sid_uri" "$spx_uri"
+    printf '&pbk=%s&fp=firefox&sni=%s&sid=%s&spx=%s' "$pbk_uri" "$sni_uri" "$sid_uri" "$spx_uri"
     [[ -n "$flow_link" ]] && printf '&flow=%s' "$flow_uri"
     if advanced_profile_has_encryption "$kind"; then
         enc_uri="$(url_encode "$encryption")"
@@ -835,7 +835,7 @@ print_advanced_profile_result() {
     if advanced_profile_has_finalmask "$kind" && [[ "$fm_enabled" == "true" && -n "$fm_json" && "$fm_json" != "null" ]]; then
         echo "  FinalMask JSON: ${fm_json}"
     fi
-    echo "  Fingerprint: chrome"
+    echo "  Fingerprint: firefox"
     echo "  SpiderX: ${spider_x}"
     print_advanced_compat_hint "$kind"
 }

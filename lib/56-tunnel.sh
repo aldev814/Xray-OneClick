@@ -1972,7 +1972,7 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_URL="https://raw.githubusercontent.com/ike-sh/Xray-OneClick/main/install.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/aldev814/Xray-OneClick/main/install.sh"
 SCRIPT_PATH="/root/install.sh"
 BUNDLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

@@ -23,7 +23,7 @@
 已安装用户可重新运行安装脚本或执行 `ike update` 获取最新 Xray-core；安装器本身在下次 `bash install.sh` 或菜单安装流程中会自动更新。
 
 ```bash
-curl -fsSL -o /root/install.sh https://raw.githubusercontent.com/ike-sh/Xray-OneClick/main/install.sh
+curl -fsSL -o /root/install.sh https://raw.githubusercontent.com/aldev814/Xray-OneClick/main/install.sh
 bash /root/install.sh
 ```
 

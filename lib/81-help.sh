@@ -32,6 +32,10 @@ Xray-OneClick 命令帮助
   ike smoke all
   ike export report --output /root/xray-report.txt
   ike export clients --output /root/xray-clients.txt
+  ike export links
+  ike export links --output /root/xray-links.txt
+  ike links
+  ike links ipv4
   ike update
   ike backup
   ike endpoint show

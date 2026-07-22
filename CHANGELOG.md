@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.1.22
+- **导出分享链接**：新增 `ike export links` / `ike links`，仅输出已安装协议的分享 URI（一行一条，便于直接导入客户端）；支持 `ipv4|ipv6|dual` 与 `--output PATH`。
+- 基础 VLESS Encryption 补齐 `build_vless_enc_share_link`，并写入 state 的 `link` 字段；`ike view` 复用该 builder。
+- Reality / 高级 Reality 组合分享链接与手动参数中的 `fp` / Fingerprint 默认改为 `firefox`。
+- 仓库地址统一为 `aldev814/Xray-OneClick`（constants、install、bootstrap、tunnel 部署包、README、发布文档）。
+
 ## 1.1.21
 - **健壮性修复（SOCKS5）**：`install_socks5` / `state_set_socks5` 由 `jq … >tmp && mv` 精简写法改为全仓一致的严谨写法（jq 失败即 `rm tmp` + 报错 + `return 1`），并为 `backup_config`/`mktemp` 补失败判断，杜绝 jq 静默失败却误报「安装完成」。
 - **健壮性修复（CLI 参数解析）**：取值类 `--flag` 作为命令末尾且缺省值时，`shift 2` 在剩余参数 <2 时不位移，导致 `while` 解析循环死循环；`lib/74-cli-protocols.sh` 与 `lib/90-test-harness.sh` 解析循环中的 `shift 2` 统一改为 `shift; shift`（≥2 个参数时等价，缺值时干净退出并回落到交互/默认值）。

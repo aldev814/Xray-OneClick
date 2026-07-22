@@ -84,9 +84,32 @@ configure_vless_encryption() {
     generate_vless_encryption_pair "$VLESS_AUTH" || return 1
 }
 
+build_vless_enc_share_link() {
+    local port="${VLESS_PORT:-}"
+    local uuid="${VLESS_UUID:-}"
+    local encryption="${VLESS_ENCRYPTION:-}"
+    local host link_port endpoint_pair enc_uri name_uri
+
+    if [[ -z "$port" && -f "$STATE_FILE" ]]; then
+        port="$(jq -r '.vless_encryption.port // empty' "$STATE_FILE" 2>/dev/null)"
+        uuid="$(jq -r '.vless_encryption.uuid // empty' "$STATE_FILE" 2>/dev/null)"
+        encryption="$(jq -r '.vless_encryption.encryption // empty' "$STATE_FILE" 2>/dev/null)"
+    fi
+
+    [[ -n "$port" && -n "$uuid" && -n "$encryption" ]] || return 1
+    endpoint_pair="$(link_endpoint_for_tag "$port" "$VLESS_TAG" "vless_encryption")"
+    IFS=$'\t' read -r host link_port <<<"$endpoint_pair"
+    enc_uri="$(url_encode "$encryption")"
+    name_uri="$(url_encode "Xray-VLESS-ENC")"
+
+    printf 'vless://%s@%s:%s?type=tcp&security=none&encryption=%s#%s' \
+        "$uuid" "$host" "$link_port" "$enc_uri" "$name_uri"
+}
+
 state_set_vless() {
     init_state
-    local tmp
+    local tmp link
+    link="$(build_vless_enc_share_link || true)"
     tmp="$(mktemp)"
     jq --arg tag "$VLESS_TAG" \
         --arg uuid "$VLESS_UUID" \
@@ -97,6 +120,7 @@ state_set_vless() {
         --arg client_rtt "$VLESS_CLIENT_RTT" \
         --arg server_ticket "$VLESS_SERVER_TICKET" \
         --arg port "$VLESS_PORT" \
+        --arg link "$link" \
         --arg listen_scope "$(protocol_listen_scope "${VLESS_LISTEN:-}")" '
         .vless_encryption = {
           "tag": $tag,
@@ -108,7 +132,8 @@ state_set_vless() {
           "client_rtt": $client_rtt,
           "server_ticket": $server_ticket,
           "port": ($port|tonumber),
-          "listen_scope": $listen_scope
+          "listen_scope": $listen_scope,
+          "link": $link
         }
        ' "$STATE_FILE" >"$tmp" && mv "$tmp" "$STATE_FILE"
     rm -f "$tmp"

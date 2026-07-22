@@ -7,7 +7,7 @@
 # Optional: XRAY_ONECLICK_REF=main  XRAY_ONECLICK_NO_MENU=1  (skip interactive menu after install)
 set -eu
 
-REPO="${XRAY_ONECLICK_REPO:-ike-sh/Xray-OneClick}"
+REPO="${XRAY_ONECLICK_REPO:-aldev814/Xray-OneClick}"
 REF="${XRAY_ONECLICK_REF:-main}"
 TS="$(date +%s 2>/dev/null || echo 0)"
 

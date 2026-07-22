@@ -406,7 +406,7 @@ build_reality_share_link() {
     flow_uri="$(url_encode "$flow_link")"
     name_uri="$(url_encode "Xray-Reality")"
 
-    printf 'vless://%s@%s:%s?type=tcp&security=reality&pbk=%s&fp=chrome&sni=%s&sid=%s' \
+    printf 'vless://%s@%s:%s?type=tcp&security=reality&pbk=%s&fp=firefox&sni=%s&sid=%s' \
         "$uuid" "$host" "$link_port" "$pbk_uri" "$sni_uri" "$sid_uri"
     [[ -n "$flow_link" ]] && printf '&flow=%s' "$flow_uri"
     printf '&spx=%s#%s' "$spx_uri" "$name_uri"
@@ -720,7 +720,7 @@ print_reality_result() {
     echo "  SNI: ${server_name}"
     echo "  PublicKey: ${public_key} (客户端字段)"
     echo "  ShortID: ${short_id}"
-    echo "  Fingerprint: chrome"
+    echo "  Fingerprint: firefox"
     echo "  SpiderX: ${spider_x}"
     [[ -n "$private_hint" ]] && echo "  服务端 privateKey 已保存到 installer-state.json，请妥善保护，默认不显示。"
     echo "兼容提示:"
