@@ -107,7 +107,7 @@ main() {
             show_version
             return 0
             ;;
-        "" | preflight | view | doctor | smoke | export | links | link | xray | migrate | uninstall | update | backup | endpoint | config | service | logs | cnblock | safety | tunnel | forward | reality | xhttp | enc-finalmask | enc-xhttp | hysteria2 | xhttp-reality | enc-reality | fullstack | bootstrap | test-config-generate) ;;
+        "" | preflight | view | doctor | smoke | export | links | link | xray | migrate | uninstall | update | upgrade | backup | endpoint | config | service | logs | cnblock | safety | tunnel | forward | reality | xhttp | enc-finalmask | enc-xhttp | hysteria2 | xhttp-reality | enc-reality | fullstack | bootstrap | test-config-generate) ;;
         *)
             err "[失败] 未知命令: $1"
             echo "运行 ike help 查看可用命令。"
@@ -181,6 +181,10 @@ main() {
                 return 1
             }
             update_xray_core
+            ;;
+        upgrade)
+            shift
+            run_upgrade_command "$@"
             ;;
         backup)
             shift

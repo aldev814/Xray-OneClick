@@ -110,3 +110,126 @@ EOF
         return 1
     }
 }
+
+# ---------------------------------------------------------------------------
+# ike upgrade：自更新安装器（install.sh + lib/）到仓库最新版本。
+# 流程：拉取远程 VERSION 比对 → 下载新 install.sh 与全部 lib/ 模块到
+# 临时目录 → 逐个 bash -n 校验 → 原子交换部署目录。任一步失败保持原状。
+# ---------------------------------------------------------------------------
+
+_ike_upgrade_fetch() {
+    local url="$1"
+    local output="$2"
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL --connect-timeout 10 --max-time 60 "$url" -o "$output"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qT 60 -O "$output" "$url"
+    else
+        err "[升级] 缺少 curl 或 wget，无法下载。"
+        return 1
+    fi
+}
+
+run_upgrade_command() {
+    local force="false"
+    local remote_version current_version
+    local version_tmp staging old_dir module module_name
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --force)
+                force="true"
+                shift
+                ;;
+            *)
+                err "[失败] 未知 upgrade 参数: $1"
+                echo "用法: ike upgrade [--force]"
+                return 1
+                ;;
+        esac
+    done
+
+    if [[ ! -d "$INSTALLER_DIR" ]]; then
+        err "[升级] 未找到安装器目录: $INSTALLER_DIR"
+        err "[提示] 请重新执行一键安装脚本部署 ike。"
+        return 1
+    fi
+
+    current_version="$SCRIPT_VERSION"
+    info "[升级] 当前脚本版本: ${current_version}"
+    info "[升级] 正在检查 ${IKE_REPOSITORY}@${IKE_REF} ..."
+
+    version_tmp="$(mktemp "${INSTALLER_DIR}/.version.tmp.XXXXXX")" || {
+        err "[升级] 创建临时文件失败。"
+        return 1
+    }
+    if ! _ike_upgrade_fetch "${IKE_RAW_BASE}/VERSION" "$version_tmp"; then
+        rm -f "$version_tmp"
+        err "[升级] 获取远程 VERSION 失败，请检查网络或仓库设置。"
+        return 1
+    fi
+    remote_version="$(tr -d ' \t\r\n' <"$version_tmp")"
+    rm -f "$version_tmp"
+    [[ -n "$remote_version" ]] || {
+        err "[升级] 远程 VERSION 为空，已中止。"
+        return 1
+    }
+    info "[升级] 远程脚本版本: ${remote_version}"
+
+    if [[ "$remote_version" == "$current_version" && "$force" != "true" ]]; then
+        ok "[升级] 已是最新版本 (${current_version})，无需更新。"
+        return 0
+    fi
+    [[ "$remote_version" != "$current_version" ]] && info "[升级] 发现新版本: ${current_version} -> ${remote_version}"
+
+    # 下载 install.sh + 当前部署副本的全部 lib/ 模块到暂存目录并校验
+    staging="$(mktemp -d "${INSTALLER_DIR}/upgrade.new.XXXXXX")" || {
+        err "[升级] 创建暂存目录失败。"
+        return 1
+    }
+    if ! _ike_upgrade_fetch "${IKE_RAW_BASE}/install.sh" "${staging}/install.sh" ||
+        [[ ! -s "${staging}/install.sh" ]] || ! bash -n "${staging}/install.sh"; then
+        remove_managed_tree "$staging" >/dev/null 2>&1 || true
+        err "[升级] 下载或校验 install.sh 失败，已保持当前版本。"
+        return 1
+    fi
+
+    mkdir -p "${staging}/lib" || {
+        remove_managed_tree "$staging" >/dev/null 2>&1 || true
+        return 1
+    }
+    shopt -s nullglob
+    local -a modules=("${INSTALLER_DIR}/lib/"*.sh)
+    shopt -u nullglob
+    [[ ${#modules[@]} -gt 0 ]] || {
+        remove_managed_tree "$staging" >/dev/null 2>&1 || true
+        err "[升级] 部署目录缺少 lib/ 模块: ${INSTALLER_DIR}/lib"
+        return 1
+    }
+    for module in "${modules[@]}"; do
+        module_name="${module##*/}"
+        if ! _ike_upgrade_fetch "${IKE_RAW_BASE}/lib/${module_name}" "${staging}/lib/${module_name}" ||
+            [[ ! -s "${staging}/lib/${module_name}" ]] || ! bash -n "${staging}/lib/${module_name}"; then
+            remove_managed_tree "$staging" >/dev/null 2>&1 || true
+            err "[升级] 下载或校验 lib/${module_name} 失败，已保持当前版本。"
+            return 1
+        fi
+    done
+
+    # 原子交换：旧目录改名保留为回滚点，暂存目录顶上，成功后清理旧目录
+    old_dir="${INSTALLER_DIR}.old.$(date +%Y%m%d%H%M%S)"
+    if ! mv "$INSTALLER_DIR" "$old_dir" || ! mv "$staging" "$INSTALLER_DIR"; then
+        err "[升级] 替换部署目录失败，正在尝试恢复。"
+        [[ -d "$old_dir" && ! -d "$INSTALLER_DIR" ]] && mv "$old_dir" "$INSTALLER_DIR" >/dev/null 2>&1 || true
+        remove_managed_tree "$staging" >/dev/null 2>&1 || true
+        return 1
+    fi
+    chmod 755 "${INSTALLER_DIR}/install.sh" 2>/dev/null || true
+    remove_managed_tree "$old_dir" >/dev/null 2>&1 || true
+
+    state_set_meta_action "脚本自升级 ${current_version} -> ${remote_version}" 2>/dev/null || true
+    ok "[完成] 脚本已升级: ${current_version} -> ${remote_version}"
+    info "[提示] 新版本已生效；如当前处于交互菜单，建议退出后重新运行 ike。"
+    return 0
+}

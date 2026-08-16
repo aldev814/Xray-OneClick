@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.1.24
+- **脚本自升级**：新增 `ike upgrade [--force]`，从 `${IKE_REPOSITORY}@${IKE_REF}` 拉取远程 `VERSION` 比对后，下载最新 `install.sh` 与全部 `lib/` 模块到暂存目录，逐个 `bash -n` 语法校验通过才原子替换部署目录（`/usr/local/share/ike`）；任一步失败保持原版本不动。`--force` 可在版本相同时强制重新部署。同时修复 1.1.23 中菜单 18/19 默认开启逻辑的无限递归（刷屏后静默失败）与全新安装时服务未创建即重启失败的隐患，默认开启不再覆盖用户手动关闭（`enhanced_block_user_set` / `cnblock_user_set` 状态标记）。
+
 ## 1.1.23
 - **合并上游 ike-sh 全量审计修复**（含 `minClientVer: 0.0.0` Reality 兼容、事务/原子写入、公网 Endpoint 探测、供应链 digest 校验、Docker 测试套件等），并保留本仓库魔改特性（`ike export links` 直接输出分享 URI、菜单 18/19 默认开启、cnblock 默认 enhanced、fp=firefox、仓库地址 aldev814）。详细见下方 1.1.22 两段。
 

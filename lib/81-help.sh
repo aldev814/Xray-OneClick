@@ -37,6 +37,8 @@ Xray-OneClick 命令帮助
   ike links
   ike links ipv4
   ike update
+  ike upgrade
+  ike upgrade --force
   ike backup
   ike endpoint show
   ike endpoint set
