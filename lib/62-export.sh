@@ -59,7 +59,7 @@ render_export_report() {
     echo "Hysteria2 摘要:"
     if inbound_exists "$HY2_TAG"; then
         jq -r --arg tag "$HY2_TAG" '.inbounds[]? | select(.tag == $tag) | "  port=\(.port) protocol=\(.protocol) obfs=\(.streamSettings.finalmask.udp[0].type // "")"' "$CONFIG_FILE"
-        jq -r ".${HY2_STATE_KEY} // {} | \"  sni=\(.sni // \"\") link=\(.link // \"\")\"" "$STATE_FILE" 2>/dev/null
+        jq -r ".${HY2_STATE_KEY} // {} | \"  sni=\(.sni // \"\") pinnedPeerCertSha256=\(.pinnedPeerCertSha256 // \"\") link=\(.link // \"\")\"" "$STATE_FILE" 2>/dev/null
     else
         echo "  未安装"
     fi

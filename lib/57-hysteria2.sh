@@ -4,6 +4,18 @@
 hysteria2_cert_path() { printf '%s' "${CONFIG_DIR}/hysteria2-cert.pem"; }
 hysteria2_key_path() { printf '%s' "${CONFIG_DIR}/hysteria2-key.pem"; }
 
+hysteria2_cert_sha256() {
+    local cert="$(hysteria2_cert_path)"
+    local fingerprint
+
+    [[ -s "$cert" ]] || return 1
+    command -v openssl >/dev/null 2>&1 || return 1
+    fingerprint="$(openssl x509 -in "$cert" -noout -fingerprint -sha256 2>/dev/null |
+        sed 's/^.*=//' | tr -d ':\r\n' | tr '[:upper:]' '[:lower:]')"
+    [[ "$fingerprint" =~ ^[0-9a-f]{64}$ ]] || return 1
+    printf '%s' "$fingerprint"
+}
+
 generate_hysteria2_cert() {
     local cert key tmp_cert tmp_key old_key=""
     cert="$(hysteria2_cert_path)"
@@ -144,9 +156,13 @@ build_hysteria2_share_link() {
 
 state_set_hysteria2() {
     init_state || return 1
-    local tmp link timestamp
+    local tmp link timestamp cert_sha256
     link="$(build_hysteria2_share_link || true)"
     timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    cert_sha256="$(hysteria2_cert_sha256)" || {
+        err "[状态] 无法计算 Hysteria2 自签证书 SHA-256 指纹。"
+        return 1
+    }
     tmp="$(state_temp_file)" || return 1
     if ! jq --arg key "$HY2_STATE_KEY" \
         --arg tag "$HY2_TAG" \
@@ -154,6 +170,7 @@ state_set_hysteria2() {
         --arg sni "$HY2_SNI" \
         --arg obfs "$HY2_OBFS" \
         --arg port "$HY2_PORT" \
+        --arg cert_sha256 "$cert_sha256" \
         --arg link "$link" \
         --arg updated "$timestamp" \
         --arg listen_scope "$(protocol_listen_scope "${HY2_LISTEN:-}")" '
@@ -163,6 +180,7 @@ state_set_hysteria2() {
           "sni": $sni,
           "obfs": $obfs,
           "port": ($port|tonumber),
+          "pinnedPeerCertSha256": $cert_sha256,
           "link": $link,
           "listen_scope": $listen_scope,
           "updated_at": $updated
@@ -269,7 +287,7 @@ install_hysteria2() {
 
 print_hysteria2_result() {
     local missing_mode="${1:-skip}"
-    local state_exists link port auth sni obfs
+    local state_exists link port auth sni obfs cert_sha256
 
     if [[ ! -f "$STATE_FILE" ]]; then
         [[ "$missing_mode" == "show" ]] && echo "[Hysteria2] 未安装。"
@@ -285,12 +303,15 @@ print_hysteria2_result() {
     auth="$(jq -r ".${HY2_STATE_KEY}.auth // empty" "$STATE_FILE" 2>/dev/null)"
     sni="$(jq -r ".${HY2_STATE_KEY}.sni // empty" "$STATE_FILE" 2>/dev/null)"
     obfs="$(jq -r ".${HY2_STATE_KEY}.obfs // empty" "$STATE_FILE" 2>/dev/null)"
+    cert_sha256="$(jq -r ".${HY2_STATE_KEY}.pinnedPeerCertSha256 // empty" "$STATE_FILE" 2>/dev/null)"
+    [[ -n "$cert_sha256" ]] || cert_sha256="$(hysteria2_cert_sha256 2>/dev/null || true)"
     link="$(build_hysteria2_share_link 2>/dev/null || jq -r ".${HY2_STATE_KEY}.link // empty" "$STATE_FILE" 2>/dev/null)"
 
     echo -e "\n${YELLOW}--- Hysteria2 ---${PLAIN}"
     echo -e "端口(UDP): ${port}"
     echo -e "认证密码: ${auth}"
     echo -e "伪装 SNI(自签证书): ${sni}"
+    echo -e "pinnedPeerCertSha256: ${cert_sha256:-未知}"
     echo -e "Obfs(salamander) 密码: ${obfs}"
     echo -e "提示: 使用自签证书，客户端需开启 insecure / 允许不安全连接。"
     [[ -n "$link" ]] && echo -e "链接: ${link}"

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.1.29
+- **Hysteria2 自签证书指纹**：安装、查看、`ike view` 和脱敏报告现在显示 `pinnedPeerCertSha256`，可直接填入客户端 TLS 配置；现有 Hysteria2 分享 URI 保持不变。
+
 ## 1.1.28
 - **彻底防止安装混版**：bootstrap 先通过 GitHub API 将分支解析为固定 commit SHA，再从同一提交下载 `install.sh` 与全部 `lib/` 模块，避免分支更新及 CDN 缓存导致版本号与功能模块不一致。
 - **修复全新安装提前重启服务**：默认安全规则初始化改为直接写配置，不再经过会调用 `apply_config` 的交互设置入口，确保 OpenRC/systemd 服务创建前不会尝试重启。
