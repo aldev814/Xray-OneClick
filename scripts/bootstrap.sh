@@ -57,11 +57,25 @@ fetch_install_sh() {
     dest="$1"
     if command -v curl >/dev/null 2>&1; then
         if curl -fsSL -H "Accept: application/vnd.github.raw+json" \
-            -o "$dest" "https://api.github.com/repos/${REPO}/contents/install.sh?ref=${REF}" 2>/dev/null; then
+            -o "$dest" "https://api.github.com/repos/${REPO}/contents/install.sh?ref=${RESOLVED_REF}" 2>/dev/null; then
             [ -s "$dest" ] && return 0
         fi
     fi
-    dl "https://raw.githubusercontent.com/${REPO}/${REF}/install.sh?ts=${TS}" "$dest"
+    dl "https://raw.githubusercontent.com/${REPO}/${RESOLVED_REF}/install.sh?ts=${TS}" "$dest"
+}
+
+resolve_ref() {
+    commit_json="${tmp_dir}/commit.json"
+    resolved=""
+    if dl "https://api.github.com/repos/${REPO}/commits/${REF}?ts=${TS}" "$commit_json" 2>/dev/null; then
+        resolved="$(sed -n 's/^[[:space:]]*"sha":[[:space:]]*"\([0-9a-f][0-9a-f]*\)".*/\1/p' "$commit_json" | head -n 1)"
+    fi
+    if [ "$(printf '%s' "$resolved" | wc -c | tr -d ' ')" = "40" ]; then
+        printf '%s' "$resolved"
+    else
+        warn "无法解析 ${REPO}@${REF} 的 commit SHA，将直接使用 ref。"
+        printf '%s' "$REF"
+    fi
 }
 
 ensure_downloader
@@ -69,8 +83,9 @@ ensure_downloader
 tmp_dir="$(mktemp -d /tmp/xray-oneclick-bootstrap.XXXXXX 2>/dev/null || mktemp -d)"
 tmp="${tmp_dir}/install.sh"
 trap 'rm -rf -- "$tmp_dir"' EXIT INT TERM
+RESOLVED_REF="$(resolve_ref)"
 
-log "下载 ${REPO} ${REF}（install.sh，GitHub API 优先）..."
+log "下载 ${REPO} ${REF}（固定提交: ${RESOLVED_REF}）..."
 fetch_install_sh "$tmp" || errx "下载 install.sh 失败，请检查网络或设置 XRAY_ONECLICK_REPO/REF。"
 [ -s "$tmp" ] || errx "下载到的 install.sh 为空。"
 chmod +x "$tmp" 2>/dev/null || true
@@ -79,7 +94,7 @@ chmod +x "$tmp" 2>/dev/null || true
 remote_ver="$(grep -m1 '^SCRIPT_VERSION=' "$tmp" 2>/dev/null | sed -E 's/^SCRIPT_VERSION="([^"]+)".*/\1/')" || remote_ver=""
 if [ -z "$remote_ver" ]; then
     cver="${tmp_dir}/01-constants.sh"
-    if dl "https://raw.githubusercontent.com/${REPO}/${REF}/lib/01-constants.sh?ts=${TS}" "$cver" 2>/dev/null; then
+    if dl "https://raw.githubusercontent.com/${REPO}/${RESOLVED_REF}/lib/01-constants.sh?ts=${TS}" "$cver" 2>/dev/null; then
         remote_ver="$(grep -m1 '^SCRIPT_VERSION=' "$cver" 2>/dev/null | sed -E 's/^SCRIPT_VERSION="([^"]+)".*/\1/')" || remote_ver=""
     fi
     rm -f "$cver" 2>/dev/null || true
@@ -89,9 +104,9 @@ fi
 if [ "$(id -u)" -eq 0 ]; then
     ensure_bash
     bash -n "$tmp" || errx "下载的 install.sh 语法校验失败。"
-    IKE_LIB_RAW_BASE="https://raw.githubusercontent.com/${REPO}/${REF}/lib"
+    IKE_LIB_RAW_BASE="https://raw.githubusercontent.com/${REPO}/${RESOLVED_REF}/lib"
     XRAY_ONECLICK_REPO="$REPO"
-    XRAY_ONECLICK_REF="$REF"
+    XRAY_ONECLICK_REF="$RESOLVED_REF"
     export IKE_LIB_RAW_BASE XRAY_ONECLICK_REPO XRAY_ONECLICK_REF
     bash "$tmp" "$@"
     exit $?
@@ -106,9 +121,9 @@ log "非 root：仅下载 install.sh 到当前目录"
 install -m 0755 "$tmp" ./install.sh 2>/dev/null || { cp "$tmp" ./install.sh && chmod 0755 ./install.sh; }
 echo "[OK] 已保存 ./install.sh（${remote_ver:-未知版本}）"
 if command -v sudo >/dev/null 2>&1; then
-    echo "请以 root 运行：sudo XRAY_ONECLICK_REPO='$REPO' XRAY_ONECLICK_REF='$REF' bash install.sh"
+    echo "请以 root 运行：sudo XRAY_ONECLICK_REPO='$REPO' XRAY_ONECLICK_REF='$RESOLVED_REF' bash install.sh"
 elif command -v doas >/dev/null 2>&1; then
-    echo "请以 root 运行：doas env XRAY_ONECLICK_REPO='$REPO' XRAY_ONECLICK_REF='$REF' bash install.sh"
+    echo "请以 root 运行：doas env XRAY_ONECLICK_REPO='$REPO' XRAY_ONECLICK_REF='$RESOLVED_REF' bash install.sh"
 else
-    echo "请切换到 root 后运行：XRAY_ONECLICK_REPO='$REPO' XRAY_ONECLICK_REF='$REF' bash install.sh"
+    echo "请切换到 root 后运行：XRAY_ONECLICK_REPO='$REPO' XRAY_ONECLICK_REF='$RESOLVED_REF' bash install.sh"
 fi

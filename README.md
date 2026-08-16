@@ -4,7 +4,7 @@ Xray-OneClick 是基于 **Xray-core** 的多协议一键部署脚本，适合在
 
 脚本支持 Shadowsocks 2022、VLESS Encryption、VLESS TCP REALITY、VLESS Encryption + XHTTP + FinalMask、VLESS Encryption + XHTTP、VLESS Encryption + FinalMask（sudoku）、SOCKS5、Hysteria2，以及高级协议组合与 Tunnel 中转管理。默认带基础安全屏蔽、配置备份、服务诊断、配置导出、Xray-core 升级和安全卸载能力，并提供 stable / prerelease 两条 Xray-core 通道。
 
-当前版本：**1.1.27**（与 `VERSION` / `ike version` 一致）
+当前版本：**1.1.28**（与 `VERSION` / `ike version` 一致）
 
 状态：正式版
 
@@ -66,13 +66,15 @@ ike preflight
 Debian / Ubuntu / RHEL 系（有 sudo）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aldev814/Xray-OneClick/main/scripts/bootstrap.sh | sudo sh
+curl -fsSL -H 'Accept: application/vnd.github.raw+json' \
+  'https://api.github.com/repos/aldev814/Xray-OneClick/contents/scripts/bootstrap.sh?ref=main' | sudo sh
 ```
 
 Alpine 或已是 root：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aldev814/Xray-OneClick/main/scripts/bootstrap.sh | sh
+curl -fsSL -H 'Accept: application/vnd.github.raw+json' \
+  'https://api.github.com/repos/aldev814/Xray-OneClick/contents/scripts/bootstrap.sh?ref=main' | sh
 ```
 
 > 说明：Alpine 默认没有 bash 与 sudo。请直接以 root 运行 `| sh`（不要加 sudo）；如系统有 `wget` 没 `curl`，也可用 `wget -qO- <url> | sh`。
@@ -80,7 +82,8 @@ curl -fsSL https://raw.githubusercontent.com/aldev814/Xray-OneClick/main/scripts
 或传统方式：
 
 ```bash
-curl -fsSL -o /root/install.sh https://raw.githubusercontent.com/aldev814/Xray-OneClick/main/install.sh
+curl -fsSL -H 'Accept: application/vnd.github.raw+json' -o /root/install.sh \
+  'https://api.github.com/repos/aldev814/Xray-OneClick/contents/install.sh?ref=main'
 chmod +x /root/install.sh
 bash /root/install.sh
 ```

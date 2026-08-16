@@ -413,9 +413,27 @@ test_vless_state_is_not_committed_before_apply() {
     echo "[OK] VLESS 配置/状态提交顺序"
 }
 
+test_init_config_does_not_restart_before_service_exists() (
+    local root="${TMP_DIR}/init-without-service"
+    CONFIG_DIR="${root}/etc/xray"
+    CONFIG_FILE="${CONFIG_DIR}/config.json"
+    STATE_FILE="${CONFIG_DIR}/installer-state.json"
+    ASSET_DIR="${root}/share/xray"
+    mkdir -p "$CONFIG_DIR" "$ASSET_DIR"
+
+    apply_config() { fail "全新初始化不应调用 apply_config"; }
+    restart_service() { fail "服务创建前不应尝试重启"; }
+
+    init_config || fail "无服务时初始化配置失败"
+    enhanced_safety_block_enabled || fail "默认增强安全规则未写入配置"
+    echo "[OK] 全新配置初始化延迟服务重启"
+)
+
 test_bootstrap_ref_consistency() {
-    grep -q 'IKE_LIB_RAW_BASE="https://raw.githubusercontent.com/${REPO}/${REF}/lib"' "${REPO_ROOT}/scripts/bootstrap.sh" ||
-        fail "bootstrap 未将模块下载固定到同一 ref"
+    grep -q 'IKE_LIB_RAW_BASE="https://raw.githubusercontent.com/${REPO}/${RESOLVED_REF}/lib"' "${REPO_ROOT}/scripts/bootstrap.sh" ||
+        fail "bootstrap 未将模块下载固定到解析后的 commit"
+    grep -q 'XRAY_ONECLICK_REF="$RESOLVED_REF"' "${REPO_ROOT}/scripts/bootstrap.sh" ||
+        fail "bootstrap 未把解析后的 commit 传给 install.sh"
     grep -Fq 'mktemp -d /tmp/xray-oneclick-bootstrap.XXXXXX' "${REPO_ROOT}/scripts/bootstrap.sh" ||
         fail "bootstrap 未使用隔离临时目录"
     if grep -Fq 'mktemp /tmp/xray-oneclick-install.XXXXXX' "${REPO_ROOT}/scripts/bootstrap.sh"; then
@@ -498,6 +516,7 @@ test_prerelease_asset_selection_and_digest
 test_hysteria_remove_preserves_cert_on_failure
 test_redacted_report_contains_no_client_credentials
 test_vless_state_is_not_committed_before_apply
+test_init_config_does_not_restart_before_service_exists
 test_bootstrap_ref_consistency
 test_installer_upgrade_staging_and_cache_busting
 test_installer_creates_only_primary_shortcut

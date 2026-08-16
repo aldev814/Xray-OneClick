@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Xray-OneClick config.json lifecycle: init, backup, validate, apply.
 
-# init_config 会被 set_enhanced_safety_block / set_china_direct_block 反向调用
-# （默认开启 18/19 逻辑），不加保护会无限递归打爆调用栈。递归入口直接返回。
+# set_enhanced_safety_block / set_china_direct_block 会调用 init_config；
+# 防重入保护可避免其它调用链再次进入初始化流程。
 init_config() {
     if [[ "${INIT_CONFIG_RUNNING:-false}" == "true" ]]; then
         return 0
@@ -80,14 +80,17 @@ JSON
         return 1
     fi
     ensure_default_safety_blocks || return 1
-    # 默认开启增强安全屏蔽（菜单 19）与中国大陆直连屏蔽增强模式（菜单 18）。
-    # defer 模式只写配置不重启服务（此时服务可能尚未创建），不覆盖用户手动设置。
+    # 默认规则直接写配置，不经过 set_* 入口，确保全新安装在服务创建前
+    # 不会触发 apply_config/restart_service；同时不覆盖用户手动设置。
     if ! enhanced_safety_block_enabled && ! enhanced_block_user_set; then
-        set_enhanced_safety_block "true" "defer" || return 1
+        info "[安全] 正在开启增强安全屏蔽..."
+        backup_config || return 1
+        write_enhanced_safety_rules "true" || return 1
     fi
     if [[ "$(china_direct_block_rule_mode)" != "enhanced" ]] && ! cnblock_user_set; then
         if [[ -f "$ASSET_DIR/geoip.dat" && -f "$ASSET_DIR/geosite.dat" ]]; then
-            set_china_direct_block "enhanced" "defer" || return 1
+            backup_config || return 1
+            write_china_direct_block_rules "enhanced" || return 1
         fi
     fi
     ensure_config_security || return 1
