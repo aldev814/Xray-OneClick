@@ -28,7 +28,6 @@ ensure_default_safety_blocks() {
     }
 
     private_mode="$(default_private_block_mode_arg)"
-    info "[安全] 默认私网屏蔽模式: $(default_private_block_mode)"
 
     tmp="$(config_temp_file)" || {
         err "[失败] [安全] 创建临时文件失败。"
@@ -128,15 +127,11 @@ enhanced_safety_block_status() {
     fi
 }
 
-set_enhanced_safety_block() {
+# mode: defer = 仅写配置不重启服务、不记状态（供 init_config 默认开启用，
+# 避免服务尚未创建时 restart 失败拖垮全新安装）。
+write_enhanced_safety_rules() {
     local enable="$1"
-    local tmp action
-
-    init_config || return 1
-    backup_config || {
-        err "[失败] [安全] 配置备份失败。"
-        return 1
-    }
+    local tmp
 
     tmp="$(config_temp_file)" || {
         err "[失败] [安全] 创建临时文件失败。"
@@ -144,7 +139,6 @@ set_enhanced_safety_block() {
     }
 
     if [[ "$enable" == "true" ]]; then
-        info "[安全] 正在开启增强安全屏蔽..."
         if ! jq --arg block "$BLOCK_OUTBOUND_TAG" \
             --arg ports "$ENHANCED_SAFETY_BLOCK_PORTS" '
           def enhanced_safety_rule:
@@ -166,7 +160,6 @@ set_enhanced_safety_block() {
             return 1
         fi
     else
-        info "[安全] 正在关闭增强安全屏蔽..."
         if ! jq --arg block "$BLOCK_OUTBOUND_TAG" \
             --arg ports "$ENHANCED_SAFETY_BLOCK_PORTS" '
           def enhanced_safety_rule:
@@ -186,12 +179,38 @@ set_enhanced_safety_block() {
         err "[失败] [安全] 写入 $CONFIG_FILE 失败。"
         return 1
     fi
+    return 0
+}
+
+set_enhanced_safety_block() {
+    local enable="$1"
+    local defer="${2:-false}"
+    local action
+
+    init_config || return 1
+
+    if ! enhanced_safety_block_enabled && [[ "$enable" == "true" ]]; then
+        info "[安全] 正在开启增强安全屏蔽..."
+    elif enhanced_safety_block_enabled && [[ "$enable" == "false" ]]; then
+        info "[安全] 正在关闭增强安全屏蔽..."
+    fi
+
+    backup_config || {
+        err "[失败] [安全] 配置备份失败。"
+        return 1
+    }
+    write_enhanced_safety_rules "$enable" || return 1
+
+    if [[ "$defer" == "true" ]]; then
+        return 0
+    fi
 
     if ! apply_config "安全"; then
         err "[失败] [安全] 应用增强安全屏蔽设置失败。"
         return 1
     fi
 
+    state_set_enhanced_block "true"
     action="关闭"
     [[ "$enable" == "true" ]] && action="启用"
     state_set_meta_action "增强安全屏蔽: ${action}" || err "[状态] 最近变更记录失败。"
@@ -287,7 +306,7 @@ china_direct_block_status() {
         if [[ "$user_set" == "true" ]]; then
             printf '%s' "已启用（用户开启）"
         else
-            printf '%s' "检测到旧规则，建议确认"
+            printf '%s' "已启用（默认开启）"
         fi
     elif [[ "$user_set" == "true" ]]; then
         printf '%s' "未启用（用户关闭）"
@@ -304,8 +323,11 @@ cnblock_reality_risk_notice() {
         "已启用（用户开启）")
             warning="中国大陆直连屏蔽已启用，如 SNI target 被影响，Reality 可能连接异常。"
             ;;
+        "已启用（默认开启）")
+            warning="中国大陆直连屏蔽默认开启（增强模式）；如不需要请执行 ike cnblock off。"
+            ;;
         "检测到旧规则，建议确认")
-            warning="检测到旧版中国大陆直连屏蔽规则，可能来自旧默认策略。当前版本默认开启（增强模式）；如不需要请执行 ike cnblock off。"
+            warning="检测到旧版中国大陆直连屏蔽规则，可能来自旧默认策略；如不需要请执行 ike cnblock off。"
             ;;
         *)
             return 0
@@ -340,28 +362,10 @@ check_china_direct_block_assets() {
     return 0
 }
 
-set_china_direct_block() {
+# defer = 仅写配置不重启服务、不记状态（供 init_config 默认开启用）。
+write_china_direct_block_rules() {
     local mode="$1"
-    local tmp action
-
-    init_config || return 1
-
-    case "$mode" in
-        off | basic | enhanced) ;;
-        *)
-            err "[失败] [路由] 未知中国大陆直连屏蔽模式: $mode"
-            return 1
-            ;;
-    esac
-
-    if [[ "$mode" != "off" ]]; then
-        check_china_direct_block_assets "$mode" || return 1
-    fi
-
-    backup_config || {
-        err "[失败] [路由] 配置备份失败。"
-        return 1
-    }
+    local tmp
 
     tmp="$(config_temp_file)" || {
         err "[失败] [路由] 创建临时文件失败。"
@@ -433,6 +437,38 @@ set_china_direct_block() {
         rm -f "$tmp"
         err "[失败] [路由] 写入 $CONFIG_FILE 失败。"
         return 1
+    fi
+    return 0
+}
+
+set_china_direct_block() {
+    local mode="$1"
+    local defer="${2:-false}"
+    local action
+
+    init_config || return 1
+
+    case "$mode" in
+        off | basic | enhanced) ;;
+        *)
+            err "[失败] [路由] 未知中国大陆直连屏蔽模式: $mode"
+            return 1
+            ;;
+    esac
+
+    if [[ "$mode" != "off" ]]; then
+        check_china_direct_block_assets "$mode" || return 1
+    fi
+
+    backup_config || {
+        err "[失败] [路由] 配置备份失败。"
+        return 1
+    }
+
+    write_china_direct_block_rules "$mode" || return 1
+
+    if [[ "$defer" == "true" ]]; then
+        return 0
     fi
 
     if ! apply_config "路由"; then

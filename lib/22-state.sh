@@ -112,6 +112,26 @@ state_set_cnblock() {
     ensure_config_security || return 1
 }
 
+state_set_enhanced_block() {
+    init_state || return 1
+    local user_set="$1"
+    local tmp
+
+    tmp="$(state_temp_file)" || return 1
+    if ! jq --arg user_set "$user_set" '
+        .enhanced_block_user_set = ($user_set == "true")
+    ' "$STATE_FILE" >"$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
+    mv "$tmp" "$STATE_FILE" || {
+        rm -f "$tmp"
+        return 1
+    }
+    rm -f "$tmp"
+    ensure_config_security || return 1
+}
+
 state_set_meta_action() {
     local action="$1"
     local timestamp tmp

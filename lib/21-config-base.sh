@@ -1,7 +1,20 @@
 #!/usr/bin/env bash
 # Xray-OneClick config.json lifecycle: init, backup, validate, apply.
 
+# init_config 会被 set_enhanced_safety_block / set_china_direct_block 反向调用
+# （默认开启 18/19 逻辑），不加保护会无限递归打爆调用栈。递归入口直接返回。
 init_config() {
+    if [[ "${INIT_CONFIG_RUNNING:-false}" == "true" ]]; then
+        return 0
+    fi
+    local rc=0
+    INIT_CONFIG_RUNNING="true"
+    _init_config_impl || rc=$?
+    INIT_CONFIG_RUNNING="false"
+    return "$rc"
+}
+
+_init_config_impl() {
     local broken tmp
 
     mkdir -p "$CONFIG_DIR" || {
@@ -67,18 +80,29 @@ JSON
         return 1
     fi
     ensure_default_safety_blocks || return 1
-    # 默认开启增强安全屏蔽（菜单 19）。
-    if ! enhanced_safety_block_enabled; then
-        set_enhanced_safety_block "true" || return 1
+    # 默认开启增强安全屏蔽（菜单 19）与中国大陆直连屏蔽增强模式（菜单 18）。
+    # defer 模式只写配置不重启服务（此时服务可能尚未创建），不覆盖用户手动设置。
+    if ! enhanced_safety_block_enabled && ! enhanced_block_user_set; then
+        set_enhanced_safety_block "true" "defer" || return 1
     fi
-    # 默认开启中国大陆直连屏蔽增强模式（菜单 18，default enhanced）。
-    if [[ "$(china_direct_block_rule_mode)" != "enhanced" ]]; then
+    if [[ "$(china_direct_block_rule_mode)" != "enhanced" ]] && ! cnblock_user_set; then
         if [[ -f "$ASSET_DIR/geoip.dat" && -f "$ASSET_DIR/geosite.dat" ]]; then
-            set_china_direct_block "enhanced" || return 1
-            state_set_cnblock "true" "false" 2>/dev/null || true
+            set_china_direct_block "enhanced" "defer" || return 1
         fi
     fi
     ensure_config_security || return 1
+}
+
+enhanced_block_user_set() {
+    [[ -f "$STATE_FILE" ]] || return 1
+    command -v jq >/dev/null 2>&1 || return 1
+    [[ "$(jq -r '.enhanced_block_user_set // false' "$STATE_FILE" 2>/dev/null)" == "true" ]]
+}
+
+cnblock_user_set() {
+    [[ -f "$STATE_FILE" ]] || return 1
+    command -v jq >/dev/null 2>&1 || return 1
+    [[ "$(jq -r '.cnblock_user_set // false' "$STATE_FILE" 2>/dev/null)" == "true" ]]
 }
 
 backup_config() {
