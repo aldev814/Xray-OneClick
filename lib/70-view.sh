@@ -785,6 +785,7 @@ uninstall() {
             remove_managed_tree "$ASSET_DIR" || return 1
             remove_managed_tree "$INSTALLER_DIR" || return 1
             rm -f -- "$BIN_PATH" "$SHORTCUT_PATH" || return 1
+            cleanup_installer_residuals || return 1
             ok "[完成] Xray 已彻底卸载。当前 shell 如仍缓存 ike 路径，可执行 hash -r。"
             exit 0
             ;;

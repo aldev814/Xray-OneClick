@@ -213,6 +213,7 @@ run_uninstall_command() {
                 ;;
         esac
     done
+    cleanup_installer_residuals || return 1
     command -v systemctl >/dev/null 2>&1 && systemctl daemon-reload >/dev/null 2>&1 || true
     ok "[卸载] 完成。"
 }

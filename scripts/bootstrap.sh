@@ -66,8 +66,9 @@ fetch_install_sh() {
 
 ensure_downloader
 
-tmp="$(mktemp /tmp/xray-oneclick-install.XXXXXX 2>/dev/null || mktemp)"
-trap 'rm -f -- "$tmp"' EXIT INT TERM
+tmp_dir="$(mktemp -d /tmp/xray-oneclick-bootstrap.XXXXXX 2>/dev/null || mktemp -d)"
+tmp="${tmp_dir}/install.sh"
+trap 'rm -rf -- "$tmp_dir"' EXIT INT TERM
 
 log "下载 ${REPO} ${REF}（install.sh，GitHub API 优先）..."
 fetch_install_sh "$tmp" || errx "下载 install.sh 失败，请检查网络或设置 XRAY_ONECLICK_REPO/REF。"
@@ -77,7 +78,7 @@ chmod +x "$tmp" 2>/dev/null || true
 # 版本号唯一来源是 lib/01-constants.sh；此处仅作信息展示，提取失败绝不能中断安装
 remote_ver="$(grep -m1 '^SCRIPT_VERSION=' "$tmp" 2>/dev/null | sed -E 's/^SCRIPT_VERSION="([^"]+)".*/\1/')" || remote_ver=""
 if [ -z "$remote_ver" ]; then
-    cver="$(mktemp 2>/dev/null || echo /tmp/ike-cver.$$)"
+    cver="${tmp_dir}/01-constants.sh"
     if dl "https://raw.githubusercontent.com/${REPO}/${REF}/lib/01-constants.sh?ts=${TS}" "$cver" 2>/dev/null; then
         remote_ver="$(grep -m1 '^SCRIPT_VERSION=' "$cver" 2>/dev/null | sed -E 's/^SCRIPT_VERSION="([^"]+)".*/\1/')" || remote_ver=""
     fi

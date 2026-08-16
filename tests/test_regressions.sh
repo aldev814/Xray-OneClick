@@ -177,18 +177,23 @@ test_keep_config_uninstall_scope() (
     SHORTCUT_PATH="${root}/bin/ike"
     XRAY_SERVICE_FILE="${root}/service/xray.service"
     XRAY_LOG_DIR="${root}/log/xray"
+    IKE_LEGACY_TMP_LIB="${root}/tmp/lib"
     INIT_SYSTEM="test"
-    mkdir -p "$CONFIG_DIR" "$ASSET_DIR" "$INSTALLER_DIR" "$(dirname "$BIN_PATH")"
+    mkdir -p "$CONFIG_DIR" "$ASSET_DIR" "$INSTALLER_DIR" "${INSTALLER_DIR}.old.test" \
+        "${INSTALLER_DIR}.upgrade.new.test" "$(dirname "$BIN_PATH")" "$IKE_LEGACY_TMP_LIB"
     printf '%s\n' '{}' >"$CONFIG_FILE"
     printf '%s\n' '{}' >"$STATE_FILE"
     printf '%s\n' xray >"$BIN_PATH"
     printf '%s\n' ike >"$SHORTCUT_PATH"
     printf '%s\n' asset >"${ASSET_DIR}/geoip.dat"
     printf '%s\n' installer >"$INSTALLER_PATH"
+    printf '%s\n' 'SCRIPT_NAME="Xray-OneClick"' >"${IKE_LEGACY_TMP_LIB}/01-constants.sh"
+    printf '%s\n' bootstrap >"${IKE_LEGACY_TMP_LIB}/00-bootstrap.sh"
 
     run_uninstall_command --keep-config --yes >/dev/null || fail "keep-config 卸载失败"
     [[ -f "$CONFIG_FILE" && -f "$STATE_FILE" ]] || fail "keep-config 卸载误删配置或 state"
-    [[ ! -e "$BIN_PATH" && ! -e "$SHORTCUT_PATH" && ! -e "$ASSET_DIR" && ! -e "$INSTALLER_DIR" ]] ||
+    [[ ! -e "$BIN_PATH" && ! -e "$SHORTCUT_PATH" && ! -e "$ASSET_DIR" && ! -e "$INSTALLER_DIR" &&
+        ! -e "${INSTALLER_DIR}.old.test" && ! -e "${INSTALLER_DIR}.upgrade.new.test" && ! -e "$IKE_LEGACY_TMP_LIB" ]] ||
         fail "keep-config 卸载未清理程序或资源目录"
     echo "[OK] keep-config 卸载范围"
 )
@@ -411,6 +416,11 @@ test_vless_state_is_not_committed_before_apply() {
 test_bootstrap_ref_consistency() {
     grep -q 'IKE_LIB_RAW_BASE="https://raw.githubusercontent.com/${REPO}/${REF}/lib"' "${REPO_ROOT}/scripts/bootstrap.sh" ||
         fail "bootstrap 未将模块下载固定到同一 ref"
+    grep -Fq 'mktemp -d /tmp/xray-oneclick-bootstrap.XXXXXX' "${REPO_ROOT}/scripts/bootstrap.sh" ||
+        fail "bootstrap 未使用隔离临时目录"
+    if grep -Fq 'mktemp /tmp/xray-oneclick-install.XXXXXX' "${REPO_ROOT}/scripts/bootstrap.sh"; then
+        fail "bootstrap 仍会把 lib 下载到共享 /tmp/lib"
+    fi
     echo "[OK] bootstrap ref 一致性"
 }
 

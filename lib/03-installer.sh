@@ -111,6 +111,37 @@ EOF
     }
 }
 
+cleanup_installer_residuals() {
+    local legacy_tmp_lib="${IKE_LEGACY_TMP_LIB:-/tmp/lib}"
+    local artifact module tmp_module
+    local -a artifacts=() tmp_modules=()
+
+    shopt -s nullglob
+    artifacts=("${INSTALLER_DIR}.old."* "${INSTALLER_DIR}.upgrade.new."*)
+    shopt -u nullglob
+    for artifact in "${artifacts[@]}"; do
+        remove_managed_tree "$artifact" || return 1
+    done
+
+    # v1.1.26 及更早的 bootstrap 曾把模块遗留在共享 /tmp/lib。
+    # 仅在 constants 明确标识为本项目时删除已知模块；其它文件一律保留。
+    if [[ -f "${legacy_tmp_lib}/01-constants.sh" ]] &&
+        grep -q '^SCRIPT_NAME="Xray-OneClick"$' "${legacy_tmp_lib}/01-constants.sh"; then
+        for module in "${IKE_LIB_MODULES[@]}"; do
+            rm -f -- "${legacy_tmp_lib}/${module}" || return 1
+            shopt -s nullglob
+            tmp_modules=("${legacy_tmp_lib}/.${module}."*)
+            shopt -u nullglob
+            for tmp_module in "${tmp_modules[@]}"; do
+                rm -f -- "$tmp_module" || return 1
+            done
+        done
+        if ! rmdir "$legacy_tmp_lib" 2>/dev/null; then
+            diag_warn "旧临时目录含非本项目文件，已保留: $legacy_tmp_lib"
+        fi
+    fi
+}
+
 # ---------------------------------------------------------------------------
 # ike upgrade：自更新安装器（install.sh + lib/）到仓库最新版本。
 # 流程：拉取远程 VERSION 比对 → 下载新 install.sh 与全部 lib/ 模块到
