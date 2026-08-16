@@ -104,9 +104,7 @@ render_export_clients() {
         echo "未找到 config.json"
         return 0
     fi
-    init_state
-    get_local_addresses
-    host_candidates "dual"
+    init_state || return 1
     view_config dual quick || true
     if [[ -f "$STATE_FILE" ]] && jq -e ".${VLESS_XHTTP_FM_STATE_KEY}.finalmask_enabled == true" "$STATE_FILE" >/dev/null 2>&1; then
         echo

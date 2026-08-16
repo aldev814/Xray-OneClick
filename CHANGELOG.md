@@ -2,11 +2,29 @@
 
 ## Unreleased
 
-## 1.1.22
+## 1.1.23
+- **合并上游 ike-sh 全量审计修复**（含 `minClientVer: 0.0.0` Reality 兼容、事务/原子写入、公网 Endpoint 探测、供应链 digest 校验、Docker 测试套件等），并保留本仓库魔改特性（`ike export links` 直接输出分享 URI、菜单 18/19 默认开启、cnblock 默认 enhanced、fp=firefox、仓库地址 aldev814）。详细见下方 1.1.22 两段。
+
+## 1.1.22（本仓库魔改特性）
 - **导出分享链接**：新增 `ike export links` / `ike links`，仅输出已安装协议的分享 URI（一行一条，便于直接导入客户端）；支持 `ipv4|ipv6|dual` 与 `--output PATH`。
 - 基础 VLESS Encryption 补齐 `build_vless_enc_share_link`，并写入 state 的 `link` 字段；`ike view` 复用该 builder。
 - Reality / 高级 Reality 组合分享链接与手动参数中的 `fp` / Fingerprint 默认改为 `firefox`。
 - 仓库地址统一为 `aldev814/Xray-OneClick`（constants、install、bootstrap、tunnel 部署包、README、发布文档）。
+- **菜单 18/19 默认开启**：`init_config` 时默认启用增强安全屏蔽（菜单 19）与大陆直连屏蔽增强模式（菜单 18，cnblock 默认 enhanced）；遵循用户已设状态，手动关闭后不强制覆盖。
+
+## 1.1.22 - 2026-08-12（上游 ike-sh 审计）
+
+- **第二轮全量审计**：修复 `migrate --dry-run` 实际写盘、迁移半成功不回滚、同秒备份覆盖、未知 CLI 子命令返回成功、`service repair` 吞掉失败、配置编辑校验/重启失败不恢复等控制流问题。
+- **事务与原子写入**：协议安装/删除、Tunnel 状态同步、密钥重置和 Xray 二进制升级均补齐 config/state/服务回滚；配置与 state 临时文件改为在目标目录内创建，避免跨文件系统 `mv` 失去原子性。
+- **安装与卸载安全**：模块下载先写临时文件并通过 Bash 语法校验后再提交；systemd/OpenRC 文件原子生成；卸载拒绝根目录和系统级宽目录，purge 备份失败会中止删除，`--keep-config` 仍会清理程序与资源目录。
+- **Endpoint 与 IPv6 修复**：自定义 Endpoint 增加主机、IPv6 和端口范围校验；本机 IPv6 探测会跳过 ULA/保留地址并继续选择真正的公网地址，避免首个 `scope global` 地址误判。
+- **Docker 测试增强**：增加迁移只读/回滚、唯一备份、安全删除、二进制回滚、Endpoint 边界、CLI 失败传播和密钥重置事务测试；完整套件提升为 warning 级 ShellCheck（仅排除跨模块变量/可选参数误报）。
+- **REALITY 客户端兼容性**：普通 Reality 与全部高级 Reality 组合生成的 `realitySettings` 显式加入 `"minClientVer": "0.0.0"`，避免新版 Xray-core 的默认最低客户端版本限制拒绝旧客户端；配置生成测试同步覆盖该字段。
+- **快捷命令冲突修复**：移除历史兼容快捷命令及其安装、卸载、菜单、测试和文档遗留；安装器现在只创建 `ike` 命令，避免覆盖其他代理项目的同名入口。
+- **公网 Endpoint 修复**：`ike view`、协议详情与客户端导出不再使用 `hostname -I` 的私网地址生成分享链接；改为并发直连多个探测源、严格过滤私网/保留地址、仅在本机存在公网 IPv6 时探测 IPv6，并复用单次探测结果。代理环境使用 `curl --noproxy '*'`，避免误取代理出口；探测失败时提示使用 `ike endpoint set`，不再静默回退到内网 IP。
+- **Xray prerelease / 供应链修复**：修复 prerelease release JSON 被重复按数组解析导致下载失败；保留解析后的真实版本信息，并使用 GitHub release asset 的 `sha256:` digest 校验下载包。旧 release 未提供 digest 时会明确提示跳过。
+- **事务与回滚修复**：基础 VLESS Encryption 对 backup/mktemp/jq/mv/state 全链路检查，配置应用成功后才提交 state；Hysteria2 删除失败时保留证书，避免回滚后的 inbound 引用已删除文件。
+- **安装一致性与测试**：bootstrap 将 `install.sh` 与 `lib/` 固定到同一个 repository/ref，并在成功执行后清理临时安装器；新增公网 IP、prerelease、摘要校验、报告脱敏、Hysteria2 删除、VLESS 状态顺序、Tunnel 导出唯一性及安装入口回归测试。新增固定版本 Xray 的 Docker 测试镜像，CI 在容器内执行模块/版本检查、全部 Shell 语法与 warning 级 ShellCheck、回归测试及真实配置校验。
 
 ## 1.1.21
 - **健壮性修复（SOCKS5）**：`install_socks5` / `state_set_socks5` 由 `jq … >tmp && mv` 精简写法改为全仓一致的严谨写法（jq 失败即 `rm tmp` + 报错 + `return 1`），并为 `backup_config`/`mktemp` 补失败判断，杜绝 jq 静默失败却误报「安装完成」。
