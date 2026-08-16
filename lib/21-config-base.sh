@@ -37,6 +37,17 @@ JSON
     ' "$CONFIG_FILE" >"$tmp" && mv "$tmp" "$CONFIG_FILE"
     rm -f "$tmp"
     ensure_default_safety_blocks || return 1
+    # 默认开启增强安全屏蔽（菜单 19）。
+    if ! enhanced_safety_block_enabled; then
+        set_enhanced_safety_block "true" || return 1
+    fi
+    # 默认开启中国大陆直连屏蔽增强模式（菜单 18，default enhanced）。
+    if [[ "$(china_direct_block_rule_mode)" != "enhanced" ]]; then
+        if [[ -f "$ASSET_DIR/geoip.dat" && -f "$ASSET_DIR/geosite.dat" ]]; then
+            set_china_direct_block "enhanced" || return 1
+            state_set_cnblock "true" "false" 2>/dev/null || true
+        fi
+    fi
     ensure_config_security
 }
 

@@ -305,7 +305,7 @@ cnblock_reality_risk_notice() {
             warning="中国大陆直连屏蔽已启用，如 SNI target 被影响，Reality 可能连接异常。"
             ;;
         "检测到旧规则，建议确认")
-            warning="检测到旧版中国大陆直连屏蔽规则，可能来自旧默认策略。1.1.6 起默认关闭；如不需要请执行 ike cnblock off。"
+            warning="检测到旧版中国大陆直连屏蔽规则，可能来自旧默认策略。当前版本默认开启（增强模式）；如不需要请执行 ike cnblock off。"
             ;;
         *)
             return 0

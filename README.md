@@ -615,10 +615,9 @@ ike view dual
 - SMTP/SMB 风险端口屏蔽
 
 默认关闭：
-- 中国大陆直连屏蔽
+- （无——默认安全屏蔽、增强安全屏蔽与大陆直连屏蔽默认均为开启）
 
-原因是 Reality / XHTTP + Reality / FullStack 需要服务端直连 SNI target。中国大陆直连屏蔽属于可选策略，默认关闭，避免误伤 Reality 类协议。
-安装/更新 Xray 和安装任意协议时都不会自动开启 cnblock，只能由 `ike cnblock ...` 手动切换。
+说明：当前版本默认开启「增强安全屏蔽」与「中国大陆直连屏蔽（增强模式）」，安装/更新 Xray 或应用配置时自动启用。注意 Reality / XHTTP + Reality / FullStack 需要服务端直连 SNI target，大陆直连屏蔽可能误伤这些协议；如遇 Reality 连接异常，可用 `ike cnblock off` 关闭大陆直连屏蔽。
 
 中国大陆直连屏蔽：
 
