@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.1.25
+- **`ike upgrade` 加固**：下载 URL 增加时间戳查询参数穿透 raw.githubusercontent.com 的 CDN 缓存；替换部署目录前校验暂存 `01-constants.sh` 的 `SCRIPT_VERSION` 与远程 `VERSION` 一致，不一致即中止，避免 CDN 缓存导致新旧文件混合部署成「混版」（版本号显示新、部分模块仍是旧）的故障。
+
 ## 1.1.24
 - **脚本自升级**：新增 `ike upgrade [--force]`，从 `${IKE_REPOSITORY}@${IKE_REF}` 拉取远程 `VERSION` 比对后，下载最新 `install.sh` 与全部 `lib/` 模块到暂存目录，逐个 `bash -n` 语法校验通过才原子替换部署目录（`/usr/local/share/ike`）；任一步失败保持原版本不动。`--force` 可在版本相同时强制重新部署。同时修复 1.1.23 中菜单 18/19 默认开启逻辑的无限递归（刷屏后静默失败）与全新安装时服务未创建即重启失败的隐患，默认开启不再覆盖用户手动关闭（`enhanced_block_user_set` / `cnblock_user_set` 状态标记）。
 

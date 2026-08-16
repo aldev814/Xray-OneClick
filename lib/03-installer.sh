@@ -121,6 +121,9 @@ _ike_upgrade_fetch() {
     local url="$1"
     local output="$2"
 
+    # raw.githubusercontent.com 有 ~5 分钟 CDN 缓存；加时间戳查询参数
+    # 破缓存，避免多文件部署拿到新旧混合版本。
+    url="${url}?t=$(date +%s)"
     if command -v curl >/dev/null 2>&1; then
         curl -fsSL --connect-timeout 10 --max-time 60 "$url" -o "$output"
     elif command -v wget >/dev/null 2>&1; then
@@ -133,7 +136,7 @@ _ike_upgrade_fetch() {
 
 run_upgrade_command() {
     local force="false"
-    local remote_version current_version
+    local remote_version current_version staged_version
     local version_tmp staging old_dir module module_name
 
     while [[ $# -gt 0 ]]; do
@@ -216,6 +219,16 @@ run_upgrade_command() {
             return 1
         fi
     done
+
+    # 暂存模块的 SCRIPT_VERSION 必须与远程 VERSION 一致，防止 CDN 缓存
+    # 返回的新旧混合文件被部署成混版（constants 是旧版时会掩盖真实版本）。
+    staged_version="$(grep -o 'SCRIPT_VERSION="[^"]*"' "${staging}/lib/01-constants.sh" 2>/dev/null | head -1 | cut -d'"' -f2)"
+    if [[ -z "$staged_version" || "$staged_version" != "$remote_version" ]]; then
+        remove_managed_tree "$staging" >/dev/null 2>&1 || true
+        err "[升级] 暂存模块版本(${staged_version:-未知})与远程 VERSION(${remote_version})不一致，可能命中 CDN 缓存，已中止。"
+        err "[提示] 请稍等几分钟后重试，或使用 ike upgrade --force。"
+        return 1
+    fi
 
     # 原子交换：旧目录改名保留为回滚点，暂存目录顶上，成功后清理旧目录
     old_dir="${INSTALLER_DIR}.old.$(date +%Y%m%d%H%M%S)"
