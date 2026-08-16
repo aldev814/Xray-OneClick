@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.1.26
+- **修复 `ike upgrade` 必然交换失败**：暂存目录改到 `/usr/local/share/ike` 的同级路径，避免部署目录改名时暂存目录被一起移动，导致后续 `mv` 找不到源目录。
+- **单文件安装防 CDN 混版**：`install.sh` 下载 `lib/*.sh` 时增加统一时间戳查询参数，避免 GitHub Raw 缓存返回旧模块。
+
 ## 1.1.25
 - **`ike upgrade` 加固**：下载 URL 增加时间戳查询参数穿透 raw.githubusercontent.com 的 CDN 缓存；替换部署目录前校验暂存 `01-constants.sh` 的 `SCRIPT_VERSION` 与远程 `VERSION` 一致，不一致即中止，避免 CDN 缓存导致新旧文件混合部署成「混版」（版本号显示新、部分模块仍是旧）的故障。
 

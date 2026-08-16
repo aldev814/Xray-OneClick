@@ -187,7 +187,10 @@ run_upgrade_command() {
     [[ "$remote_version" != "$current_version" ]] && info "[升级] 发现新版本: ${current_version} -> ${remote_version}"
 
     # 下载 install.sh + 当前部署副本的全部 lib/ 模块到暂存目录并校验
-    staging="$(mktemp -d "${INSTALLER_DIR}/upgrade.new.XXXXXX")" || {
+    # 暂存目录必须放在部署目录的同级路径。若放在 INSTALLER_DIR 内，
+    # 后面的 `mv "$INSTALLER_DIR" "$old_dir"` 会把 staging 一起搬走，
+    # 导致第二次 mv 找不到原路径。
+    staging="$(mktemp -d "${INSTALLER_DIR}.upgrade.new.XXXXXX")" || {
         err "[升级] 创建暂存目录失败。"
         return 1
     }

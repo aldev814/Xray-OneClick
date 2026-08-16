@@ -47,7 +47,11 @@ IKE_LIB_MODULES=(
 ike_ensure_lib_modules() {
     local root_dir="$1"
     local lib_dir="${root_dir}/lib"
-    local module tmp_module missing=()
+    local module tmp_module missing=() cache_buster
+
+    # raw.githubusercontent.com 可能缓存旧模块；安装入口与自升级都要
+    # 使用同一个时间戳，避免 VERSION 和 SCRIPT_VERSION 来自不同版本。
+    cache_buster="$(date +%s 2>/dev/null || printf '0')"
 
     mkdir -p "$lib_dir" || return 1
     for module in "${IKE_LIB_MODULES[@]}"; do
@@ -64,12 +68,12 @@ ike_ensure_lib_modules() {
     for module in "${missing[@]}"; do
         tmp_module="$(mktemp "${lib_dir}/.${module}.XXXXXX")" || return 1
         if command -v curl >/dev/null 2>&1; then
-            curl -fsSL "${IKE_LIB_RAW_BASE}/${module}" -o "$tmp_module" || {
+            curl -fsSL "${IKE_LIB_RAW_BASE}/${module}?t=${cache_buster}" -o "$tmp_module" || {
                 rm -f "$tmp_module"
                 return 1
             }
         else
-            wget -qO "$tmp_module" "${IKE_LIB_RAW_BASE}/${module}" || {
+            wget -qO "$tmp_module" "${IKE_LIB_RAW_BASE}/${module}?t=${cache_buster}" || {
                 rm -f "$tmp_module"
                 return 1
             }
@@ -265,5 +269,4 @@ main() {
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     main "$@"
 fi
-
 

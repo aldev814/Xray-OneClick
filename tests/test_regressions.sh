@@ -414,6 +414,17 @@ test_bootstrap_ref_consistency() {
     echo "[OK] bootstrap ref 一致性"
 }
 
+test_installer_upgrade_staging_and_cache_busting() {
+    grep -Fq 'mktemp -d "${INSTALLER_DIR}.upgrade.new.XXXXXX"' "${REPO_ROOT}/lib/03-installer.sh" ||
+        fail "upgrade 暂存目录必须位于部署目录同级"
+    if grep -Fq 'mktemp -d "${INSTALLER_DIR}/upgrade.new.XXXXXX"' "${REPO_ROOT}/lib/03-installer.sh"; then
+        fail "upgrade 暂存目录不能位于部署目录内部"
+    fi
+    grep -Fq '${IKE_LIB_RAW_BASE}/${module}?t=${cache_buster}' "${REPO_ROOT}/install.sh" ||
+        fail "单文件安装下载模块时缺少 CDN 缓存穿透参数"
+    echo "[OK] 安装器升级暂存路径与缓存穿透"
+}
+
 test_installer_creates_only_primary_shortcut() {
     local root="${TMP_DIR}/installer"
     local -a shortcuts=()
@@ -478,6 +489,7 @@ test_hysteria_remove_preserves_cert_on_failure
 test_redacted_report_contains_no_client_credentials
 test_vless_state_is_not_committed_before_apply
 test_bootstrap_ref_consistency
+test_installer_upgrade_staging_and_cache_busting
 test_installer_creates_only_primary_shortcut
 test_tunnel_exports_are_unique_and_complete
 echo "[OK] 回归测试全部通过"
