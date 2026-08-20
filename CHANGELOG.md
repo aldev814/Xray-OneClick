@@ -8,6 +8,7 @@
   - **按需解压与即解即删**：移除冗余的 `unzip -t`，仅按需解压核心二进制与 geo 数据，解压完成后立即删除 25MB+ 压缩包并冲刷磁盘缓存（`sync`），杜绝压缩包与解压文件同时驻留内存。
   - **单副本移动**：geo 规则文件放置由 `cp` 改为 `mv`，避免在临时目录与目标目录各保留一份副本。
   - **Go 运行时低内存调优**：在 OpenRC 与 Systemd 服务中注入 `GOMEMLIMIT=35MiB`、`GOGC=30` 与 `GODEBUG=madvdontneed=1`，确保 Xray 守护进程在 64MB 极小内存下稳定运行不崩溃。
+  - **恢复中国大陆直连屏蔽默认关闭（`cnblock: off`）**：不再在 `init_config` 中默认启用 cnblock（enhanced），避免加载数万条域名规则（`geosite:cn`）常驻占用 ~20MB 堆内存，用户仍可按需通过 `ike cnblock basic|enhanced` 手动开启。
 
 ## 1.1.29
 - **Hysteria2 自签证书指纹**：安装、查看、`ike view` 和脱敏报告现在显示 `pinnedPeerCertSha256`，可直接填入客户端 TLS 配置；现有 Hysteria2 分享 URI 保持不变。

@@ -294,45 +294,24 @@ china_direct_block_enabled() {
 }
 
 china_direct_block_status() {
-    local user_set="false"
     local mode
 
-    [[ -f "$STATE_FILE" ]] && command -v jq >/dev/null 2>&1 && {
-        user_set="$(jq -r '.cnblock_user_set // false' "$STATE_FILE" 2>/dev/null)"
-    }
     mode="$(china_direct_block_rule_mode)"
 
     if [[ "$mode" != "off" ]]; then
-        if [[ "$user_set" == "true" ]]; then
-            printf '%s' "已启用（用户开启）"
-        else
-            printf '%s' "已启用（默认开启）"
-        fi
-    elif [[ "$user_set" == "true" ]]; then
-        printf '%s' "未启用（用户关闭）"
+        printf '%s' "已启用"
     else
         printf '%s' "未启用"
     fi
 }
 
 cnblock_reality_risk_notice() {
-    local status warning
+    local warning
 
-    status="$(china_direct_block_status)"
-    case "$status" in
-        "已启用（用户开启）")
-            warning="中国大陆直连屏蔽已启用，如 SNI target 被影响，Reality 可能连接异常。"
-            ;;
-        "已启用（默认开启）")
-            warning="中国大陆直连屏蔽默认开启（增强模式）；如不需要请执行 ike cnblock off。"
-            ;;
-        "检测到旧规则，建议确认")
-            warning="检测到旧版中国大陆直连屏蔽规则，可能来自旧默认策略；如不需要请执行 ike cnblock off。"
-            ;;
-        *)
-            return 0
-            ;;
-    esac
+    if ! china_direct_block_enabled; then
+        return 0
+    fi
+    warning="中国大陆直连屏蔽已启用，如 SNI target 被影响，Reality 可能连接异常；如不需要请执行 ike cnblock off。"
 
     [[ "${CNBLOCK_RISK_NOTICE_SHOWN:-false}" == "true" ]] && return 0
     CNBLOCK_RISK_NOTICE_SHOWN="true"

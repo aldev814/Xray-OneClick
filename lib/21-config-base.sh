@@ -87,12 +87,6 @@ JSON
         backup_config || return 1
         write_enhanced_safety_rules "true" || return 1
     fi
-    if [[ "$(china_direct_block_rule_mode)" != "enhanced" ]] && ! cnblock_user_set; then
-        if [[ -f "$ASSET_DIR/geoip.dat" && -f "$ASSET_DIR/geosite.dat" ]]; then
-            backup_config || return 1
-            write_china_direct_block_rules "enhanced" || return 1
-        fi
-    fi
     ensure_config_security || return 1
 }
 

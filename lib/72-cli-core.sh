@@ -324,7 +324,7 @@ migrate_old_state() {
 
     if [[ "$(china_direct_block_rule_mode)" != "off" ]]; then
         if [[ "$(jq -r '.cnblock_user_set // empty' "$STATE_FILE" 2>/dev/null)" != "true" ]]; then
-            diag_warn "检测到旧版中国大陆直连屏蔽规则。当前版本默认开启（增强模式）；如不需要请执行 ike cnblock off。"
+            diag_warn "检测到中国大陆直连屏蔽规则；如不需要请执行 ike cnblock off。"
         fi
     fi
 

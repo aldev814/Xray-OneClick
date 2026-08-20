@@ -8,9 +8,9 @@ Xray-OneClick 是基于 **Xray-core** 的多协议一键部署脚本，适合在
 
 状态：正式版
 
-本次版本：1.1.30 针对 **64MB 极限低内存容器（Podman / Docker / Alpine）** 进行了深度优化：下载临时目录智能避开 tmpfs 内存盘（改用 /var/tmp）、按需精准解压并**立即删除 25MB+ 压缩包**、以 mv 替换 cp 杜绝多重副本占用，并在服务模板中注入 Go 运行时内存限制（GOMEMLIMIT=35MiB 等），彻底解决低内存容器解压 Xray 时爆内存崩溃的问题。
+本次版本：1.1.30 针对 **64MB 极限低内存容器（Podman / Docker / Alpine）** 进行了深度优化：下载临时目录智能避开 tmpfs 内存盘（改用 /var/tmp）、按需精准解压并**立即删除 25MB+ 压缩包**、以 mv 替换 cp 杜绝多重副本占用，并在服务模板中注入 Go 运行时内存限制（GOMEMLIMIT=35MiB 等），彻底解决低内存容器解压 Xray 时爆内存崩溃的问题。同时将中国大陆直连屏蔽（`cnblock`）恢复为默认关闭（off），大幅降低小内存机器的常驻内存开销。
 
-说明：1.1.23 在本仓库魔改特性基础上合并了上游 ike-sh 的全量审计修复（REALITY `minClientVer: 0.0.0`、事务/原子写入、公网 Endpoint 探测、供应链 digest 校验、Docker 测试套件、移除 sb/sing-box 遗留等）。本仓库保留：`ike export links` / `ike links` 直接输出分享 URI、菜单 18/19 默认开启（cnblock 默认 enhanced）、Reality 链接 fingerprint 默认 `firefox`、仓库地址统一为 `aldev814/Xray-OneClick`。
+说明：1.1.23 在本仓库魔改特性基础上合并了上游 ike-sh 的全量审计修复（REALITY `minClientVer: 0.0.0`、事务/原子写入、公网 Endpoint 探测、供应链 digest 校验、Docker 测试套件、移除 sb/sing-box 遗留等）。本仓库保留：`ike export links` / `ike links` 直接输出分享 URI、菜单 19 默认开启增强安全屏蔽、Reality 链接 fingerprint 默认 `firefox`、仓库地址统一为 `aldev814/Xray-OneClick`。
 
 ## 功能特性
 
@@ -634,9 +634,9 @@ ike view dual
 - SMTP/SMB 风险端口屏蔽
 
 默认关闭：
-- （无——默认安全屏蔽、增强安全屏蔽与大陆直连屏蔽默认均为开启）
+- 中国大陆直连屏蔽（`cnblock`，默认 off；如需开启可执行 `ike cnblock basic` 或 `ike cnblock enhanced`）
 
-说明：当前版本默认开启「增强安全屏蔽」与「中国大陆直连屏蔽（增强模式）」，安装/更新 Xray 或应用配置时自动启用。注意 Reality / XHTTP + Reality / FullStack 需要服务端直连 SNI target，大陆直连屏蔽可能误伤这些协议；如遇 Reality 连接异常，可用 `ike cnblock off` 关闭大陆直连屏蔽。
+说明：当前版本默认开启「增强安全屏蔽」（0 内存开销）；「中国大陆直连屏蔽」恢复为默认关闭（off），以降低 64MB/128MB 小内存机器因加载巨型 geo 数据库产生的常驻内存开销。注意 Reality / XHTTP + Reality / FullStack 需要服务端直连 SNI target，若手动开启大陆直连屏蔽可能误伤这些协议；如遇 Reality 连接异常，可用 `ike cnblock off` 关闭大陆直连屏蔽。
 
 中国大陆直连屏蔽：
 
