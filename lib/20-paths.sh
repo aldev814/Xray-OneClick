@@ -72,6 +72,18 @@ state_temp_file() {
     mktemp "${STATE_FILE}.tmp.XXXXXX"
 }
 
+xray_create_download_tmpdir() {
+    local base_dir="${TMPDIR:-/tmp}"
+    if [[ -d "/var/tmp" && -w "/var/tmp" ]]; then
+        if grep -qsE '[[:space:]]/tmp[[:space:]]+tmpfs' /proc/mounts 2>/dev/null \
+            || (command -v df >/dev/null 2>&1 && df -T /tmp 2>/dev/null | grep -qi "tmpfs") \
+            || [[ -n "${XRAY_USE_VARTMP:-}" ]]; then
+            base_dir="/var/tmp"
+        fi
+    fi
+    mktemp -d "${base_dir}/xray.XXXXXX"
+}
+
 validate_xray_binary_path() {
     local target="${1:-}" segmented
 

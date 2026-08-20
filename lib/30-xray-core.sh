@@ -305,14 +305,18 @@ verify_xray_archive() {
         err "[核心] Xray 压缩包不存在或为空。"
         return 1
     }
-    unzip -t "$zip_path" >/dev/null || {
-        err "[核心] unzip -t 校验失败。"
-        return 1
-    }
-    unzip -qo "$zip_path" -d "$extract_dir" || {
-        err "[核心] 解压失败。"
-        return 1
-    }
+    # 优先按需解压核心二进制与 geo 数据，失败则回退全量解压
+    if ! unzip -qo "$zip_path" xray geoip.dat geosite.dat -d "$extract_dir" 2>/dev/null; then
+        unzip -qo "$zip_path" -d "$extract_dir" || {
+            err "[核心] 解压失败。"
+            rm -f "$zip_path"
+            return 1
+        }
+    fi
+    # 解压完成后立即删除压缩包并冲刷缓存，避免在 64MB 极限容器或 tmpfs 中 OOM
+    rm -f "$zip_path"
+    sync 2>/dev/null || true
+
     xray_bin="${extract_dir}/xray"
     [[ -f "$xray_bin" ]] || xray_bin="$(find "$extract_dir" -type f -name xray | head -n 1)"
     [[ -n "$xray_bin" && -f "$xray_bin" ]] || {
@@ -334,7 +338,7 @@ download_xray_core() {
     local asset_info url zip_path resolved_version prerelease digest
 
     if [[ -z "$tmpdir" ]]; then
-        tmpdir="$(mktemp -d)" || return 1
+        tmpdir="$(xray_create_download_tmpdir)" || return 1
     fi
     mkdir -p "$tmpdir" || return 1
     channel="$(normalize_xray_channel "$channel")" || {
@@ -382,7 +386,7 @@ upgrade_xray_core() {
         return 1
     }
     detect_arch
-    tmpdir="$(mktemp -d)" || return 1
+    tmpdir="$(xray_create_download_tmpdir)" || return 1
     download_xray_core "$version" "$channel" "$tmpdir" || {
         rm -rf "$tmpdir"
         return 1
@@ -484,7 +488,7 @@ install_or_update_xray() {
         return 0
     fi
 
-    tmpdir="$(mktemp -d)" || {
+    tmpdir="$(xray_create_download_tmpdir)" || {
         err "[核心] 创建下载临时目录失败。"
         return 1
     }
@@ -524,14 +528,14 @@ install_or_update_xray() {
     backup_path="${XRAY_REPLACED_BACKUP_PATH:-}"
     had_original="${XRAY_REPLACED_HAD_ORIGINAL:-false}"
 
-    if [[ -f "${tmpdir}/geoip.dat" ]] && ! cp "${tmpdir}/geoip.dat" "$ASSET_DIR/"; then
+    if [[ -f "${tmpdir}/geoip.dat" ]] && ! mv "${tmpdir}/geoip.dat" "$ASSET_DIR/"; then
         rollback_xray_binary_replacement "$backup_path" "$had_original" || true
         [[ "$service_was_active" == "true" ]] && restart_service >/dev/null 2>&1 || true
         rm -rf "$tmpdir"
         err "[核心] 更新 geoip.dat 失败。"
         return 1
     fi
-    if [[ -f "${tmpdir}/geosite.dat" ]] && ! cp "${tmpdir}/geosite.dat" "$ASSET_DIR/"; then
+    if [[ -f "${tmpdir}/geosite.dat" ]] && ! mv "${tmpdir}/geosite.dat" "$ASSET_DIR/"; then
         rollback_xray_binary_replacement "$backup_path" "$had_original" || true
         [[ "$service_was_active" == "true" ]] && restart_service >/dev/null 2>&1 || true
         rm -rf "$tmpdir"

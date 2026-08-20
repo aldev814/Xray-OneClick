@@ -77,6 +77,7 @@ Wants=network-online.target
 Type=simple
 User=root
 WorkingDirectory=$ASSET_DIR
+Environment="GOMEMLIMIT=35MiB" "GOGC=30" "GODEBUG=madvdontneed=1"
 ExecStart=$BIN_PATH run -c $CONFIG_FILE
 Restart=on-failure
 RestartSec=10
@@ -159,6 +160,10 @@ ensure_xray_service() {
 
 name="xray"
 description="Xray Service"
+
+export GOMEMLIMIT="35MiB"
+export GOGC="30"
+export GODEBUG="madvdontneed=1"
 
 command="$BIN_PATH"
 command_args="run -c $CONFIG_FILE"

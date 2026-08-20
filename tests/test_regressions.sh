@@ -503,6 +503,28 @@ JSON
     echo "[OK] Tunnel 导出唯一性与完整性"
 )
 
+test_lowmem_optimizations() (
+    local test_dir="${TMP_DIR}/lowmem"
+    mkdir -p "$test_dir"
+
+    # 1. 验证 xray_create_download_tmpdir 支持 XRAY_USE_VARTMP 或回退
+    if [[ -d "/var/tmp" && -w "/var/tmp" ]]; then
+        local vartmp_dir
+        vartmp_dir="$(XRAY_USE_VARTMP=1 xray_create_download_tmpdir)" || fail "xray_create_download_tmpdir 失败"
+        [[ "$vartmp_dir" == /var/tmp/xray.* ]] || fail "XRAY_USE_VARTMP 未优先使用 /var/tmp: $vartmp_dir"
+        rm -rf "$vartmp_dir"
+    fi
+
+    # 2. 验证 Systemd / OpenRC 服务模版包含 GOMEMLIMIT 环境变量
+    local service_tmp="${test_dir}/xray.service"
+    write_xray_service "$service_tmp" true || fail "write_xray_service 失败"
+    grep -q 'GOMEMLIMIT=35MiB' "$service_tmp" || fail "Systemd 服务模版缺少 GOMEMLIMIT"
+    grep -q 'GOGC=30' "$service_tmp" || fail "Systemd 服务模版缺少 GOGC"
+    grep -q 'GODEBUG=madvdontneed=1' "$service_tmp" || fail "Systemd 服务模版缺少 GODEBUG"
+
+    echo "[OK] 64MB 低内存容器优化与环境变量"
+)
+
 test_migrate_dry_run_and_schema_upgrade
 test_unique_backups_and_safe_removal
 test_xray_binary_replacement_rollback
@@ -521,4 +543,5 @@ test_bootstrap_ref_consistency
 test_installer_upgrade_staging_and_cache_busting
 test_installer_creates_only_primary_shortcut
 test_tunnel_exports_are_unique_and_complete
+test_lowmem_optimizations
 echo "[OK] 回归测试全部通过"

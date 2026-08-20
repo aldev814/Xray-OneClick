@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.1.30
+- **64MB 极限低内存容器支持**：
+  - **避开 `tmpfs` 内存盘**：下载临时目录在检测到 `/tmp` 处于 tmpfs 挂载或指定变量时，自动回退到真正的磁盘路径 `/var/tmp`，防止压缩包直接挤占容器 RAM。
+  - **按需解压与即解即删**：移除冗余的 `unzip -t`，仅按需解压核心二进制与 geo 数据，解压完成后立即删除 25MB+ 压缩包并冲刷磁盘缓存（`sync`），杜绝压缩包与解压文件同时驻留内存。
+  - **单副本移动**：geo 规则文件放置由 `cp` 改为 `mv`，避免在临时目录与目标目录各保留一份副本。
+  - **Go 运行时低内存调优**：在 OpenRC 与 Systemd 服务中注入 `GOMEMLIMIT=35MiB`、`GOGC=30` 与 `GODEBUG=madvdontneed=1`，确保 Xray 守护进程在 64MB 极小内存下稳定运行不崩溃。
+
 ## 1.1.29
 - **Hysteria2 自签证书指纹**：安装、查看、`ike view` 和脱敏报告现在显示 `pinnedPeerCertSha256`，可直接填入客户端 TLS 配置；现有 Hysteria2 分享 URI 保持不变。
 
