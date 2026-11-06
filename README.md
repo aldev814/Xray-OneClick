@@ -10,7 +10,7 @@ Xray-OneClick 是基于 **Xray-core** 的多协议一键部署脚本，适合在
 
 本次版本：1.1.31 针对 **64MB 极限低内存容器（Podman / Docker / Alpine）** 进行了深度优化：下载临时目录智能避开 tmpfs 内存盘（改用 /var/tmp）、按需精准解压并**立即删除 25MB+ 压缩包**、以 mv 替换 cp 杜绝多重副本占用，并在服务模板中注入 Go 运行时内存限制（GOMEMLIMIT=35MiB 等），彻底解决低内存容器解压 Xray 时爆内存崩溃的问题。同时将中国大陆直连屏蔽（`cnblock`）恢复为默认关闭（off），大幅降低小内存机器的常驻内存开销。
 
-说明：1.1.23 在本仓库魔改特性基础上合并了上游 ike-sh 的全量审计修复（REALITY `minClientVer: 0.0.0`、事务/原子写入、公网 Endpoint 探测、供应链 digest 校验、Docker 测试套件、移除 sb/sing-box 遗留等）。本仓库保留：`ike export links` / `ike links` 直接输出分享 URI、菜单 19 默认开启增强安全屏蔽、Reality 链接 fingerprint 默认 `firefox`、仓库地址统一为 `aldev814/Xray-OneClick`。
+说明：1.1.23 在本仓库魔改特性基础上合并了上游 ike-sh 的全量审计修复（REALITY `minClientVer: 0.0.0`、事务/原子写入、公网 Endpoint 探测、供应链 digest 校验、Docker 测试套件、移除 sb/sing-box 遗留等）。本仓库保留：`ike export links` / `ike links` 直接输出分享 URI、默认开启增强安全屏蔽、Reality 链接 fingerprint 默认 `firefox`、仓库地址统一为 `aldev814/Xray-OneClick`。
 
 ## 功能特性
 
@@ -153,29 +153,23 @@ XRAY_VERSION=v26.3.27 XRAY_CHANNEL=prerelease ike xray upgrade
 ## 主菜单
 
 ```text
-1. 安装/更新 Xray 核心
-2. 安装 Shadowsocks 2022
-3. 安装 IPv6 + Shadowsocks 2022
-4. 安装 VLESS Encryption
-5. 安装 VLESS TCP REALITY
-6. 安装 VLESS Encryption + XHTTP
-7. 安装 VLESS Encryption + XHTTP + FinalMask
-8. 安装 VLESS Encryption + FinalMask（sudoku，TCP）
-9. 安装 VLESS XHTTP + REALITY（高级）
-10. 安装 VLESS Encryption + REALITY（高级）
-11. 安装 VLESS Encryption + XHTTP + REALITY + FinalMask（FullStack）
-12. 安装 SOCKS5 代理
-13. 安装 Hysteria2
-14. 查看当前配置链接
-15. 设置链接显示模式 (IPv4/IPv6/双栈)
-16. 重置密钥/密码（端口不变，覆盖全部 VLESS / REALITY 系列）
-17. 卸载/清理
-18. 开启/关闭中国大陆直连屏蔽
-19. 开启/关闭增强安全屏蔽
-20. 导出当前配置备份
-21. Tunnel 中转管理
-22. 退出
+1. 协议安装
+2. Tunnel 中转管理
+3. 配置与分享链接
+4. 服务与诊断
+5. 安全与路由
+6. 备份与配置迁移
+7. 重置密钥 / 密码
+8. 核心与脚本更新
+9. 卸载 / 清理
+0. 退出
 ```
+
+协议安装子菜单按常用协议、VLESS Encryption 组合、REALITY 高级组合分组，并为已有入站标记 `[已配置]`。子菜单输入 `0` 返回主菜单；一次操作完成后留在当前子菜单，便于继续管理。
+
+服务状态、重启、日志、配置校验与诊断集中在“服务与诊断”；迁移预览和执行位于“备份与配置迁移”。
+
+按 Xray-examples 示例目录核对的协议组合、反向代理和回落方案覆盖情况，见[协议组合覆盖清单](docs/PROTOCOL_COVERAGE.md)。
 
 ## 常用命令
 
@@ -242,7 +236,7 @@ docker run --rm xray-oneclick-test
 通过菜单安装：
 
 ```text
-2. 安装 Shadowsocks 2022
+主菜单 1 → 协议安装 2：Shadowsocks 2022
 ```
 
 脚本支持：
@@ -251,7 +245,7 @@ docker run --rm xray-oneclick-test
 - `2022-blake3-aes-256-gcm`
 - `2022-blake3-chacha20-poly1305`
 
-菜单第 2 项安装普通 SS2022，默认按 IPv4 入站监听；菜单第 3 项安装 IPv6 + SS2022，需要服务器存在可用的全局 IPv6 地址。脚本只会在协议实际监听 IPv6/双栈，并且系统检测到全局 IPv6 地址时输出 IPv6 链接。普通 IPv4-only 入站不会因为服务器有 IPv6 地址而强行输出 IPv6 链接。
+协议安装子菜单第 2 项安装普通 SS2022，第 12 项先检查全局 IPv6，再安装 IPv6 / 双栈版本。分享链接按当前监听配置和检测到的公网地址生成。
 
 如果 `sysctl` 显示 `disable_ipv6=1`，但脚本通过网卡检测到了全局 IPv6 地址，会给出 warning 并按实际地址继续；如果没有全局 IPv6 地址，则 IPv6 + SS2022 会拒绝安装。
 
@@ -260,7 +254,7 @@ docker run --rm xray-oneclick-test
 通过菜单安装：
 
 ```text
-4. 安装 VLESS Encryption
+主菜单 1 → 协议安装 5：VLESS Encryption
 ```
 
 或使用：
@@ -278,7 +272,7 @@ ike view
 通过菜单安装：
 
 ```text
-5. 安装 VLESS TCP REALITY
+主菜单 1 → 协议安装 1：VLESS TCP REALITY
 ```
 
 直接命令：
@@ -360,7 +354,7 @@ ike smoke reality
 通过菜单安装：
 
 ```text
-6. 安装 VLESS Encryption + XHTTP + FinalMask
+主菜单 1 → 协议安装 8：VLESS Encryption + XHTTP + FinalMask
 ```
 
 直接命令：
@@ -438,7 +432,7 @@ ike xhttp install --finalmask on --finalmask-json '{"tcp":[{"type":"fragment","s
 
 ## 高级协议组合
 
-高级协议组合已直接放在主菜单第 9、10、11 项：
+高级协议组合位于“协议安装”子菜单第 9、10、11 项：
 
 ```text
 9. 安装 VLESS XHTTP + REALITY（高级）
@@ -466,7 +460,7 @@ FullStack 不作为普通用户默认推荐。如果 FullStack 不兼容，建�
 3. `ike enc-reality install`
 4. `ike reality install`
 5. `ike xhttp install --finalmask off`
-6. 菜单第 4 项安装 VLESS Encryption
+6. 协议安装子菜单第 5 项安装 VLESS Encryption
 7. SS2022 / SOCKS5
 
 ### VLESS XHTTP + REALITY
@@ -564,7 +558,7 @@ ike fullstack install --finalmask off
 通过菜单安装：
 
 ```text
-12. 安装 SOCKS5 代理
+主菜单 1 → 协议安装 4：SOCKS5
 ```
 
 SOCKS5 适合临时代理或内网调试。安装后可通过 `ike view` 查看连接参数。脚本只会在 SOCKS5 入站实际监听 IPv6/双栈时输出 IPv6 链接；默认 IPv4-only 监听不会输出不可用的 IPv6 链接。
@@ -574,7 +568,7 @@ SOCKS5 适合临时代理或内网调试。安装后可通过 `ike view` 查看�
 通过菜单进入：
 
 ```text
-21. Tunnel 中转管理
+主菜单 2：Tunnel 中转管理
 ```
 
 常用命令：
@@ -617,7 +611,7 @@ ike endpoint clear
 ike endpoint detect
 ```
 
-显示模式可在菜单第 15 项切换，也可通过：
+显示模式可在“配置与分享链接 → 链接显示模式”切换，也可通过：
 
 ```bash
 ike view ipv4
@@ -832,7 +826,7 @@ ike migrate
 
 ## 卸载与清理
 
-主菜单第 17 项进入卸载/清理菜单：
+主菜单第 9 项进入卸载/清理菜单：
 
 ```text
  1) 删除 SS2022 配置

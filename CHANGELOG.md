@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **终端菜单整理**：主菜单收拢为 9 个功能入口，协议安装按用途分组并标记已配置项；补齐服务诊断、分享链接、迁移预览及脚本更新入口，同步菜单文档和协议覆盖清单。
 - **官方文档字段同步**：VLESS/Hysteria/SOCKS 用户列表使用 `users`；Tunnel 使用 `rewriteAddress/rewritePort/allowedNetwork`；FinalMask 分片使用 `lengths/delays` 数组；识别 `V6Only` 并移除 REALITY 服务端的 `spiderX`。查看、导出、密钥重置兼容旧字段，`ike migrate` 同步转换配置和 FinalMask state。
 - **诊断报告脱敏**：报告中的分享链接统一脱敏，补齐 SOCKS5 URI 识别。
 - **链式代理目标保留**：所有 VLESS 入站的嗅探增加 `routeOnly: true`，避免将内层 TLS/REALITY 的 SNI 覆盖为实际连接目标；`ike migrate` 可为已启用嗅探的本脚本 VLESS 入站补齐该设置。
