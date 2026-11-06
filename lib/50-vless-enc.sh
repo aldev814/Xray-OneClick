@@ -172,7 +172,7 @@ install_vless_encryption() {
           "port": ($port|tonumber),
           "protocol": "vless",
           "settings": {
-            "clients": [
+            "users": [
               {
                 "id": $uuid,
                 "email": "vless@xray"
@@ -186,6 +186,7 @@ install_vless_encryption() {
           },
           "sniffing": {
             "enabled": true,
+            "routeOnly": true,
             "destOverride": ["http", "tls"]
           }
         }]
@@ -367,7 +368,7 @@ install_vless_enc_finalmask() {
           "port": ($port|tonumber),
           "protocol": "vless",
           "settings": {
-            "clients": [
+            "users": [
               {
                 "id": $uuid,
                 "email": "tcp-finalmask@xray"
@@ -382,6 +383,7 @@ install_vless_enc_finalmask() {
           },
           "sniffing": {
             "enabled": true,
+            "routeOnly": true,
             "destOverride": ["http", "tls"]
           }
         }]

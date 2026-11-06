@@ -117,6 +117,21 @@ run_case() {
     [[ -s "$out" ]] || fail "$name 未生成 config.json"
     jq . "$out" >/dev/null || fail "$name 生成的 JSON 无效"
     assert_no_reality_dest "$out"
+    jq -e '
+      all(.inbounds[]?;
+        (if .protocol == "vless" or .protocol == "hysteria" or .protocol == "socks" then
+          (.settings.users | type == "array") and
+          (.settings | has("clients") or has("accounts") | not)
+        elif .protocol == "tunnel" or .protocol == "dokodemo-door" then
+          (.settings | has("rewriteAddress") and has("rewritePort") and has("allowedNetwork")) and
+          (.settings | has("address") or has("port") or has("network") | not)
+        else true end) and
+        (.streamSettings.realitySettings // {} | has("spiderX") | not))
+    ' "$out" >/dev/null || fail "$name 未使用官方文档字段或服务端混入 spiderX"
+    jq -e '
+      all(.inbounds[]? | select(.sniffing.enabled == true);
+        .sniffing.routeOnly == true)
+    ' "$out" >/dev/null || fail "$name 嗅探不得覆盖原始目标（链式 REALITY 转发会连接到伪装 SNI）"
     run_xray_config_test_if_available "$out"
     LAST_CONFIG="$out"
 }
@@ -170,8 +185,8 @@ assert_finalmask_balanced() {
       ($fm.tcp | type == "array") and
       ($fm.tcp[0].type == "fragment") and
       ($fm.tcp[0].settings.packets == "tlshello") and
-      ($fm.tcp[0].settings.length == "100-200") and
-      ($fm.tcp[0].settings.delay == "10-20") and
+      ($fm.tcp[0].settings.lengths == ["100-200"]) and
+      ($fm.tcp[0].settings.delays == ["10-20"]) and
       ($fm.tcp[0].settings.maxSplit == "3-6")
     ' "$config" >/dev/null || fail "FinalMask balanced 配置不合法: tag=$tag config=$config"
 }
@@ -219,7 +234,7 @@ assert_hysteria2() {
       (.inbounds[]? | select(.tag == $tag)) as $in |
       ($in.protocol == "hysteria") and
       ($in.settings.version == 2) and
-      (($in.settings.clients[0].auth // "") | length > 0) and
+      (($in.settings.users[0].auth // "") | length > 0) and
       ($in.streamSettings.network == "hysteria") and
       ($in.streamSettings.security == "tls") and
       ($in.streamSettings.hysteriaSettings.version == 2) and

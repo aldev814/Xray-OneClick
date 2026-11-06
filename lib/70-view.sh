@@ -77,7 +77,7 @@ view_config() {
     vless_in="$(jq -c --arg tag "$VLESS_TAG" '.inbounds[]? | select(.tag == $tag)' "$CONFIG_FILE" 2>/dev/null)"
     if [[ -n "$vless_in" ]]; then
         vp="$(echo "$vless_in" | jq -r '.port')"
-        vu="$(echo "$vless_in" | jq -r '.settings.clients[0].id')"
+        vu="$(echo "$vless_in" | jq -r '(.settings.users // .settings.clients)[0].id')"
         venc="$(jq -r '.vless_encryption.encryption // empty' "$STATE_FILE" 2>/dev/null)"
         vmode="$(jq -r '.vless_encryption.mode // "basic"' "$STATE_FILE" 2>/dev/null)"
         vmethod="$(jq -r '.vless_encryption.enc_method // "native"' "$STATE_FILE" 2>/dev/null)"
@@ -136,8 +136,8 @@ view_config() {
     socks_in="$(jq -c --arg tag "$SOCKS_TAG" '.inbounds[]? | select(.tag == $tag)' "$CONFIG_FILE" 2>/dev/null)"
     if [[ -n "$socks_in" ]]; then
         sp="$(echo "$socks_in" | jq -r '.port')"
-        su="$(echo "$socks_in" | jq -r '.settings.accounts[0].user')"
-        sw="$(echo "$socks_in" | jq -r '.settings.accounts[0].pass')"
+        su="$(echo "$socks_in" | jq -r '(.settings.users // .settings.accounts)[0].user')"
+        sw="$(echo "$socks_in" | jq -r '(.settings.users // .settings.accounts)[0].pass')"
 
         echo -e "\n${YELLOW}--- SOCKS5 ---${PLAIN}"
         echo -e "端口: ${sp}"
@@ -208,7 +208,8 @@ reset_vless_enc_finalmask_secret() {
     generate_vless_encryption_pair "$VLESS_AUTH" || return 1
     tmp="$(config_temp_file)" || return 1
     if ! jq --arg tag "$VLESS_ENC_FM_TAG" --arg uuid "$VLESS_UUID" --arg decryption "$VLESS_DECRYPTION" '
-        (.inbounds[] | select(.tag == $tag).settings.clients[0].id) = $uuid |
+        (.inbounds[] | select(.tag == $tag).settings) |= (.users = (.users // .clients // []) | del(.clients)) |
+        (.inbounds[] | select(.tag == $tag).settings.users[0].id) = $uuid |
         (.inbounds[] | select(.tag == $tag).settings.decryption) = $decryption
        ' "$CONFIG_FILE" >"$tmp"; then
         rm -f "$tmp"
@@ -242,7 +243,8 @@ reset_vless_enc_xhttp_secret() {
     generate_vless_encryption_pair "$VLESS_AUTH" || return 1
     tmp="$(config_temp_file)" || return 1
     if ! jq --arg tag "$VLESS_ENC_XHTTP_TAG" --arg uuid "$VLESS_UUID" --arg decryption "$VLESS_DECRYPTION" '
-        (.inbounds[] | select(.tag == $tag).settings.clients[0].id) = $uuid |
+        (.inbounds[] | select(.tag == $tag).settings) |= (.users = (.users // .clients // []) | del(.clients)) |
+        (.inbounds[] | select(.tag == $tag).settings.users[0].id) = $uuid |
         (.inbounds[] | select(.tag == $tag).settings.decryption) = $decryption
        ' "$CONFIG_FILE" >"$tmp"; then
         rm -f "$tmp"
@@ -279,7 +281,8 @@ reset_vless_xhttp_finalmask_secret() {
     generate_vless_encryption_pair "$VLESS_AUTH" || return 1
     tmp="$(config_temp_file)" || return 1
     if ! jq --arg tag "$VLESS_XHTTP_FM_TAG" --arg uuid "$VLESS_UUID" --arg decryption "$VLESS_DECRYPTION" '
-        (.inbounds[] | select(.tag == $tag).settings.clients[0].id) = $uuid |
+        (.inbounds[] | select(.tag == $tag).settings) |= (.users = (.users // .clients // []) | del(.clients)) |
+        (.inbounds[] | select(.tag == $tag).settings.users[0].id) = $uuid |
         (.inbounds[] | select(.tag == $tag).settings.decryption) = $decryption
        ' "$CONFIG_FILE" >"$tmp"; then
         rm -f "$tmp"
@@ -313,8 +316,9 @@ reset_reality_secret() {
     generate_reality_keys || return 1
     tmp="$(config_temp_file)" || return 1
     if ! jq --arg tag "$REALITY_TAG" --arg uuid "$REALITY_UUID" --arg pk "$REALITY_PRIVATE_KEY" '
+        (.inbounds[] | select(.tag == $tag).settings) |= (.users = (.users // .clients // []) | del(.clients)) |
         (.inbounds[] | select(.tag == $tag).streamSettings.realitySettings.privateKey) = $pk |
-        (.inbounds[] | select(.tag == $tag) | select((.settings.clients | length) > 0).settings.clients[0].id) = $uuid
+        (.inbounds[] | select(.tag == $tag) | select((.settings.users | length) > 0).settings.users[0].id) = $uuid
        ' "$CONFIG_FILE" >"$tmp"; then
         rm -f "$tmp"
         return 1
@@ -376,8 +380,9 @@ reset_advanced_secret() {
     tmp="$(config_temp_file)" || return 1
     if ! jq --arg tag "$tag" --arg uuid "$ADVANCED_UUID" --arg pk "$REALITY_PRIVATE_KEY" \
         --arg has_enc "$has_enc" --arg decryption "${VLESS_DECRYPTION:-}" '
+        (.inbounds[] | select(.tag == $tag).settings) |= (.users = (.users // .clients // []) | del(.clients)) |
         (.inbounds[] | select(.tag == $tag).streamSettings.realitySettings.privateKey) = $pk |
-        (.inbounds[] | select(.tag == $tag) | select((.settings.clients | length) > 0).settings.clients[0].id) = $uuid |
+        (.inbounds[] | select(.tag == $tag) | select((.settings.users | length) > 0).settings.users[0].id) = $uuid |
         if $has_enc == "true" then
           (.inbounds[] | select(.tag == $tag).settings.decryption) = $decryption
         else . end
@@ -517,9 +522,10 @@ reset_secrets() {
             VLESS_SERVER_TICKET="$(jq -r '.vless_encryption.server_ticket // "600s"' "$STATE_FILE" 2>/dev/null)"
             if ! VLESS_UUID="$(generate_uuid)" || ! generate_vless_encryption_pair "$VLESS_AUTH" ||
                 ! jq_config_update --arg tag "$VLESS_TAG" --arg uuid "$VLESS_UUID" --arg decryption "$VLESS_DECRYPTION" '
-                    (.inbounds[] | select(.tag == $tag).settings.clients[0].id) = $uuid |
+                    (.inbounds[] | select(.tag == $tag).settings) |= (.users = (.users // .clients // []) | del(.clients)) |
+                    (.inbounds[] | select(.tag == $tag).settings.users[0].id) = $uuid |
                     (.inbounds[] | select(.tag == $tag).settings.decryption) = $decryption |
-                    del(.inbounds[] | select(.tag == $tag).settings.clients[0].flow)
+                    del(.inbounds[] | select(.tag == $tag).settings.users[0].flow)
                    ' || ! state_set_vless; then
                 discard_secret_reset_working_copy "$real_config" "$real_state" "$working_config" "$working_state" "$config_snapshot" "$state_snapshot"
                 err "[失败] 重置 VLESS Encryption 失败，未修改原配置。"
@@ -560,7 +566,7 @@ EOF
             S_PASS="$(openssl rand -hex 8)"
             [[ -n "$S_PASS" ]] || S_PASS="$(generate_uuid | tr -d '-')"
             if [[ -z "$S_PASS" ]] || ! jq_config_update --arg tag "$SOCKS_TAG" --arg pass "$S_PASS" \
-                '(.inbounds[] | select(.tag == $tag).settings.accounts[0].pass) = $pass'; then
+                '(.inbounds[] | select(.tag == $tag).settings) |= (.users = (.users // .accounts // []) | del(.accounts)) | (.inbounds[] | select(.tag == $tag).settings.users[0].pass) = $pass'; then
                 discard_secret_reset_working_copy "$real_config" "$real_state" "$working_config" "$working_state" "$config_snapshot" "$state_snapshot"
                 err "[失败] 生成或写入 SOCKS5 新密码失败，未修改原配置。"
                 return 1

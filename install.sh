@@ -101,7 +101,7 @@ fi
 # shellcheck source=lib/00-bootstrap.sh disable=SC1091
 source "${IKE_INSTALLER_DIR}/lib/00-bootstrap.sh"
 
-main() {
+main() (
     case "${1:-}" in
         help | -h | --help)
             show_help
@@ -140,6 +140,9 @@ main() {
     ensure_root
     check_os
     detect_arch
+    if ike_command_needs_lock "$@"; then
+        ike_acquire_lock || return 1
+    fi
     apply_env_endpoint_if_needed || return 1
 
     case "${1:-}" in
@@ -264,7 +267,7 @@ main() {
             run_bootstrap_command "$@"
             ;;
     esac
-}
+)
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     main "$@"

@@ -165,10 +165,35 @@ _ike_upgrade_fetch() {
     fi
 }
 
+# Parse the target installer's declarative module array without executing it.
+ike_upgrade_modules() {
+    local installer="$1" line name in_modules="false" closed="false"
+    local -a names=()
+    while IFS= read -r line; do
+        if [[ "$in_modules" == "false" ]]; then
+            [[ "$line" == 'IKE_LIB_MODULES=(' ]] && in_modules="true"
+            continue
+        fi
+        if [[ "$line" == ')' ]]; then
+            closed="true"
+            break
+        fi
+        name="$(printf '%s' "$line" | sed -n 's/^[[:space:]]*"\([0-9][0-9]-[a-zA-Z0-9_-]*\.sh\)"[[:space:]]*$/\1/p')"
+        [[ -n "$name" ]] || return 1
+        case " ${names[*]-} " in *" $name "*) return 1 ;; esac
+        names+=("$name")
+    done <"$installer"
+    [[ "$closed" == "true" && ${#names[@]} -gt 0 ]] || return 1
+    case " ${names[*]-} " in *' 00-bootstrap.sh '*) ;; *) return 1 ;; esac
+    case " ${names[*]-} " in *' 01-constants.sh '*) ;; *) return 1 ;; esac
+    printf '%s\n' "${names[@]}"
+}
+
 run_upgrade_command() {
     local force="false"
     local remote_version current_version staged_version
-    local version_tmp staging old_dir module module_name
+    local version_tmp staging old_dir module_name resolved_ref raw_base ref_encoded manifest
+    local -a modules=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -190,6 +215,10 @@ run_upgrade_command() {
         return 1
     fi
 
+    command -v jq >/dev/null 2>&1 || {
+        err "[升级] 缺少 jq，无法解析目标提交。"
+        return 1
+    }
     current_version="$SCRIPT_VERSION"
     info "[升级] 当前脚本版本: ${current_version}"
     info "[升级] 正在检查 ${IKE_REPOSITORY}@${IKE_REF} ..."
@@ -198,7 +227,29 @@ run_upgrade_command() {
         err "[升级] 创建临时文件失败。"
         return 1
     }
-    if ! _ike_upgrade_fetch "${IKE_RAW_BASE}/VERSION" "$version_tmp"; then
+    # Resolve once; all subsequent files must come from this immutable commit.
+    if [[ "$IKE_REF" =~ ^[0-9a-f]{40}$ ]]; then
+        resolved_ref="$IKE_REF"
+    else
+        ref_encoded="$(printf '%s' "$IKE_REF" | jq -sRr @uri)" || {
+            rm -f "$version_tmp"
+            return 1
+        }
+        if ! _ike_upgrade_fetch "https://api.github.com/repos/${IKE_REPOSITORY}/commits/${ref_encoded}" "$version_tmp"; then
+            rm -f "$version_tmp"
+            err "[升级] 无法解析目标提交，已保持当前版本。"
+            return 1
+        fi
+        resolved_ref="$(jq -er '.sha | select(type == "string")' "$version_tmp")" || resolved_ref=""
+    fi
+    if [[ ! "$resolved_ref" =~ ^[0-9a-f]{40}$ ]]; then
+        rm -f "$version_tmp"
+        err "[升级] 目标 commit SHA 无效，已中止。"
+        return 1
+    fi
+    raw_base="https://raw.githubusercontent.com/${IKE_REPOSITORY}/${resolved_ref}"
+    info "[升级] 固定提交: $resolved_ref"
+    if ! _ike_upgrade_fetch "${raw_base}/VERSION" "$version_tmp"; then
         rm -f "$version_tmp"
         err "[升级] 获取远程 VERSION 失败，请检查网络或仓库设置。"
         return 1
@@ -217,7 +268,7 @@ run_upgrade_command() {
     fi
     [[ "$remote_version" != "$current_version" ]] && info "[升级] 发现新版本: ${current_version} -> ${remote_version}"
 
-    # 下载 install.sh + 当前部署副本的全部 lib/ 模块到暂存目录并校验
+    # 从目标 install.sh 读取模块清单，兼容模块新增与删除。
     # 暂存目录必须放在部署目录的同级路径。若放在 INSTALLER_DIR 内，
     # 后面的 `mv "$INSTALLER_DIR" "$old_dir"` 会把 staging 一起搬走，
     # 导致第二次 mv 找不到原路径。
@@ -225,7 +276,7 @@ run_upgrade_command() {
         err "[升级] 创建暂存目录失败。"
         return 1
     }
-    if ! _ike_upgrade_fetch "${IKE_RAW_BASE}/install.sh" "${staging}/install.sh" ||
+    if ! _ike_upgrade_fetch "${raw_base}/install.sh" "${staging}/install.sh" ||
         [[ ! -s "${staging}/install.sh" ]] || ! bash -n "${staging}/install.sh"; then
         remove_managed_tree "$staging" >/dev/null 2>&1 || true
         err "[升级] 下载或校验 install.sh 失败，已保持当前版本。"
@@ -236,17 +287,16 @@ run_upgrade_command() {
         remove_managed_tree "$staging" >/dev/null 2>&1 || true
         return 1
     }
-    shopt -s nullglob
-    local -a modules=("${INSTALLER_DIR}/lib/"*.sh)
-    shopt -u nullglob
-    [[ ${#modules[@]} -gt 0 ]] || {
+    if ! manifest="$(ike_upgrade_modules "${staging}/install.sh")"; then
         remove_managed_tree "$staging" >/dev/null 2>&1 || true
-        err "[升级] 部署目录缺少 lib/ 模块: ${INSTALLER_DIR}/lib"
+        err "[升级] 目标模块清单无效，已保持当前版本。"
         return 1
-    }
-    for module in "${modules[@]}"; do
-        module_name="${module##*/}"
-        if ! _ike_upgrade_fetch "${IKE_RAW_BASE}/lib/${module_name}" "${staging}/lib/${module_name}" ||
+    fi
+    while IFS= read -r module_name; do
+        modules+=("$module_name")
+    done <<<"$manifest"
+    for module_name in "${modules[@]}"; do
+        if ! _ike_upgrade_fetch "${raw_base}/lib/${module_name}" "${staging}/lib/${module_name}" ||
             [[ ! -s "${staging}/lib/${module_name}" ]] || ! bash -n "${staging}/lib/${module_name}"; then
             remove_managed_tree "$staging" >/dev/null 2>&1 || true
             err "[升级] 下载或校验 lib/${module_name} 失败，已保持当前版本。"
@@ -264,15 +314,31 @@ run_upgrade_command() {
         return 1
     fi
 
-    # 原子交换：旧目录改名保留为回滚点，暂存目录顶上，成功后清理旧目录
-    old_dir="${INSTALLER_DIR}.old.$(date +%Y%m%d%H%M%S)"
+    # Check the entire target loader before replacing the deployed tree.
+    if ! chmod 755 "${staging}/install.sh" ||
+        ! (unset IKE_LIB_BOOTSTRAPPED; bash "${staging}/install.sh" version >/dev/null); then
+        remove_managed_tree "$staging" >/dev/null 2>&1 || true
+        err "[升级] 目标安装器加载失败，已保持当前版本。"
+        return 1
+    fi
+    if ! printf '%s\n' "$resolved_ref" >"${staging}/COMMIT"; then
+        remove_managed_tree "$staging" >/dev/null 2>&1 || true
+        return 1
+    fi
+    old_dir="$(mktemp -d "${INSTALLER_DIR}.old.XXXXXX")" || {
+        remove_managed_tree "$staging" >/dev/null 2>&1 || true
+        return 1
+    }
+    rmdir "$old_dir" || {
+        remove_managed_tree "$staging" >/dev/null 2>&1 || true
+        return 1
+    }
     if ! mv "$INSTALLER_DIR" "$old_dir" || ! mv "$staging" "$INSTALLER_DIR"; then
         err "[升级] 替换部署目录失败，正在尝试恢复。"
         [[ -d "$old_dir" && ! -d "$INSTALLER_DIR" ]] && mv "$old_dir" "$INSTALLER_DIR" >/dev/null 2>&1 || true
         remove_managed_tree "$staging" >/dev/null 2>&1 || true
         return 1
     fi
-    chmod 755 "${INSTALLER_DIR}/install.sh" 2>/dev/null || true
     remove_managed_tree "$old_dir" >/dev/null 2>&1 || true
 
     state_set_meta_action "脚本自升级 ${current_version} -> ${remote_version}" 2>/dev/null || true

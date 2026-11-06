@@ -62,7 +62,7 @@ Xray-OneClick 命令帮助
   ike cnblock basic
   ike cnblock enhanced
   ike cnblock off
-  说明：中国大陆直连屏蔽默认开启（增强模式），可用 ike cnblock off 关闭。
+  说明：中国大陆直连屏蔽默认关闭，可用 ike cnblock basic 或 enhanced 开启。
   ike safety enhanced on
   ike safety enhanced off
   ike reality install

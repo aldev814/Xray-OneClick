@@ -690,7 +690,7 @@ install_advanced_profile() {
           "port": ($port|tonumber),
           "protocol": "vless",
           "settings": {
-            "clients": [
+            "users": [
               ({
                 "id": $uuid,
                 "email": "advanced@xray"
@@ -706,7 +706,6 @@ install_advanced_profile() {
               "show": false,
               "xver": 0,
               "minClientVer": $min_client_ver,
-              "spiderX": env.ADVANCED_SPIDER_X,
               "shortIds": $short_ids,
               "privateKey": $private_key,
               "serverNames": [$sni]
@@ -724,6 +723,7 @@ install_advanced_profile() {
           else . end),
           "sniffing": {
             "enabled": true,
+            "routeOnly": true,
             "destOverride": ["http", "tls"]
           }
         })]

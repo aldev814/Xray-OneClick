@@ -232,7 +232,7 @@ install_hysteria2() {
           "protocol": "hysteria",
           "settings": {
             "version": 2,
-            "clients": [ { "auth": $auth, "email": "hysteria2@xray" } ]
+            "users": [ { "auth": $auth, "email": "hysteria2@xray" } ]
           },
           "streamSettings": {
             "network": "hysteria",

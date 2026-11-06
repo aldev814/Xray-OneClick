@@ -2,6 +2,10 @@
 # ike export command implementations.
 
 render_export_report() {
+    render_export_report_body | redact_sensitive_stream
+}
+
+render_export_report_body() {
     local tags ports xray_version
 
     [[ -n "${INIT_SYSTEM:-}" ]] || check_os
@@ -26,7 +30,7 @@ render_export_report() {
     echo
     echo "Reality 摘要:"
     if inbound_exists "$REALITY_TAG"; then
-        jq -r --arg tag "$REALITY_TAG" '.inbounds[]? | select(.tag == $tag) | "  port=\(.port) sni=\(.streamSettings.realitySettings.serverNames[0] // "") flow=\(.settings.clients[0].flow // "")"' "$CONFIG_FILE"
+        jq -r --arg tag "$REALITY_TAG" '.inbounds[]? | select(.tag == $tag) | "  port=\(.port) sni=\(.streamSettings.realitySettings.serverNames[0] // "") flow=\((.settings.users // .settings.clients)[0].flow // "")"' "$CONFIG_FILE"
         jq -r ".${REALITY_STATE_KEY} // {} | \"  publicKey=\(.public_key // \"\") shortId=\(.default_short_id // \"\") link=\(.link // \"\")\"" "$STATE_FILE" 2>/dev/null
     else
         echo "  未安装"
@@ -66,19 +70,19 @@ render_export_report() {
     echo
     echo "高级协议组合摘要:"
     if inbound_exists "$VLESS_XHTTP_REALITY_TAG"; then
-        jq -r --arg tag "$VLESS_XHTTP_REALITY_TAG" '.inbounds[]? | select(.tag == $tag) | "  XHTTP-Reality port=\(.port) path=\(.streamSettings.xhttpSettings.path // "") sni=\(.streamSettings.realitySettings.serverNames[0] // "") flow=\(.settings.clients[0].flow // "none")"' "$CONFIG_FILE"
+        jq -r --arg tag "$VLESS_XHTTP_REALITY_TAG" '.inbounds[]? | select(.tag == $tag) | "  XHTTP-Reality port=\(.port) path=\(.streamSettings.xhttpSettings.path // "") sni=\(.streamSettings.realitySettings.serverNames[0] // "") flow=\((.settings.users // .settings.clients)[0].flow // "none")"' "$CONFIG_FILE"
         jq -r ".${VLESS_XHTTP_REALITY_STATE_KEY} // {} | \"    publicKey=\(.public_key // \"\") shortId=\(.default_short_id // \"\") flow=\(.flow // \"none\")\"" "$STATE_FILE" 2>/dev/null
     else
         echo "  XHTTP-Reality: 未安装"
     fi
     if inbound_exists "$VLESS_ENC_REALITY_TAG"; then
-        jq -r --arg tag "$VLESS_ENC_REALITY_TAG" '.inbounds[]? | select(.tag == $tag) | "  Enc-Reality port=\(.port) sni=\(.streamSettings.realitySettings.serverNames[0] // "") flow=\(.settings.clients[0].flow // "none")"' "$CONFIG_FILE"
+        jq -r --arg tag "$VLESS_ENC_REALITY_TAG" '.inbounds[]? | select(.tag == $tag) | "  Enc-Reality port=\(.port) sni=\(.streamSettings.realitySettings.serverNames[0] // "") flow=\((.settings.users // .settings.clients)[0].flow // "none")"' "$CONFIG_FILE"
         jq -r ".${VLESS_ENC_REALITY_STATE_KEY} // {} | \"    publicKey=\(.public_key // \"\") shortId=\(.default_short_id // \"\") flow=\(.flow // \"none\")\"" "$STATE_FILE" 2>/dev/null
     else
         echo "  Enc-Reality: 未安装"
     fi
     if inbound_exists "$VLESS_FULLSTACK_TAG"; then
-        jq -r --arg tag "$VLESS_FULLSTACK_TAG" '.inbounds[]? | select(.tag == $tag) | "  FullStack port=\(.port) path=\(.streamSettings.xhttpSettings.path // "") sni=\(.streamSettings.realitySettings.serverNames[0] // "") flow=\(.settings.clients[0].flow // "none") finalmask=\(.streamSettings | has("finalmask"))"' "$CONFIG_FILE"
+        jq -r --arg tag "$VLESS_FULLSTACK_TAG" '.inbounds[]? | select(.tag == $tag) | "  FullStack port=\(.port) path=\(.streamSettings.xhttpSettings.path // "") sni=\(.streamSettings.realitySettings.serverNames[0] // "") flow=\((.settings.users // .settings.clients)[0].flow // "none") finalmask=\(.streamSettings | has("finalmask"))"' "$CONFIG_FILE"
         jq -r ".${VLESS_FULLSTACK_STATE_KEY} // {} | \"    publicKey=\(.public_key // \"\") shortId=\(.default_short_id // \"\") flow=\(.flow // \"none\") finalmask_enabled=\(.finalmask_enabled // false) mode=\(.finalmask_mode // \"off\") preset=\(.finalmask_preset // \"none\") summary=\(.finalmask_summary // \"\")\"" "$STATE_FILE" 2>/dev/null
     else
         echo "  FullStack: 未安装"
@@ -116,140 +120,93 @@ render_export_clients() {
     fi
 }
 
-# Print only share URIs (one per line) for installed protocols. Suitable for copy/paste
-# into clients or `ike export links --output file`. Prefer freshly built links; fall back
-# to state-stored link when rebuild fails.
+# SS/SOCKS credentials come from the active config; use the same endpoint mapping
+# as VLESS so NAT/custom external ports are honored for every exported protocol.
+build_simple_proxy_share_link() {
+    local tag="$1" scheme="$2" inbound port pair host link_port credentials user pass
+    inbound="$(jq -c --arg tag "$tag" '.inbounds[]? | select(.tag == $tag)' "$CONFIG_FILE")" || return 1
+    [[ -n "$inbound" ]] || return 1
+    port="$(printf '%s' "$inbound" | jq -r '.port')"
+    pair="$(link_endpoint_for_tag "$port" "$tag")" || return 1
+    IFS=$'\t' read -r host link_port <<<"$pair"
+    if [[ "$scheme" == "ss" ]]; then
+        credentials="$(printf '%s' "$inbound" | jq -jr '.settings | .method + ":" + .password' | b64_url_no_pad)" || return 1
+    else
+        user="$(printf '%s' "$inbound" | jq -r '(.settings.users // .settings.accounts)[0].user')"
+        pass="$(printf '%s' "$inbound" | jq -r '(.settings.users // .settings.accounts)[0].pass')"
+        credentials="$(url_encode "$user"):$(url_encode "$pass")"
+    fi
+    printf '%s://%s@%s:%s' "$scheme" "$credentials" "$host" "$link_port"
+    [[ "$scheme" != "ss" ]] || printf '#SS2022'
+    return 0
+}
+
+# Print fresh URIs for each requested address family. Never reuse saved links:
+# their endpoint/port/address family may no longer match the requested export.
 render_export_links() {
-    local mode="${1:-dual}"
-    local count=0
-    local link ss_in ssp ssw ssm user_info saved_mode
+    local mode="${1:-dual}" count=0 kind custom emitted=""
+    local CURRENT_LINK_VIEW_MODE="$mode"
+    # Builders must load each profile from state, not leftover menu install vars.
+    local VLESS_PORT="" REALITY_PORT="" XHTTP_PORT="" VLESS_ENC_FM_PORT=""
+    local ENC_XHTTP_PORT="" ADVANCED_PORT="" HY2_PORT=""
 
-    if [[ ! -f "$CONFIG_FILE" ]]; then
-        err "[导出] 未找到 config.json，请先安装协议。"
+    [[ -f "$CONFIG_FILE" ]] || {
+        err "[导出] 未找到 config.json，请先安装协议。" >&2
         return 1
-    fi
-    if ! command -v jq >/dev/null 2>&1; then
-        err "[导出] 缺少 jq，无法读取配置。"
-        return 1
-    fi
-
-    init_state
-    get_local_addresses
+    }
+    command -v jq >/dev/null 2>&1 || return 1
+    init_state || return 1
+    get_public_addresses
     host_candidates "$mode"
-    CURRENT_LINK_VIEW_MODE="$mode"
-    saved_mode="$mode"
+    custom="$(endpoint_custom_value)"
 
     _export_emit_link() {
         local uri="$1"
-        [[ -n "$uri" ]] || return 0
+        [[ -n "$uri" && "$uri" != *YOUR_SERVER* ]] || return 0
+        [[ "$emitted" != *"$uri"$'\n'* ]] || return 0
         printf '%s\n' "$uri"
+        emitted+="$uri"$'\n'
         count=$((count + 1))
     }
 
-    # Shadowsocks 2022
-    ss_in="$(jq -c --arg tag "$SS_TAG" '.inbounds[]? | select(.tag == $tag)' "$CONFIG_FILE" 2>/dev/null)"
-    if [[ -n "$ss_in" ]]; then
-        ssp="$(echo "$ss_in" | jq -r '.port')"
-        ssw="$(echo "$ss_in" | jq -r '.settings.password')"
-        ssm="$(echo "$ss_in" | jq -r '.settings.method')"
-        user_info="$(printf '%s' "${ssm}:${ssw}" | b64_url_no_pad)"
-        if [[ -n "$IPV4_HOST" && "$mode" != "ipv6" ]]; then
-            _export_emit_link "ss://${user_info}@${IPV4_HOST}:${ssp}#SS2022-IPv4"
-        fi
-        if should_print_ipv6_link "$mode" "$SS_TAG" "ss2022"; then
-            _export_emit_link "ss://${user_info}@${IPV6_HOST}:${ssp}#SS2022-IPv6"
-        fi
-    fi
-
-    # VLESS Encryption (plain TCP)
-    if inbound_exists "$VLESS_TAG"; then
-        if [[ "$mode" == "ipv6" ]]; then
-            if should_print_ipv6_link "ipv6" "$VLESS_TAG" "vless_encryption"; then
-                CURRENT_LINK_VIEW_MODE="ipv6"
-                link="$(build_vless_enc_share_link 2>/dev/null || true)"
-                _export_emit_link "$link"
-            fi
-        elif [[ "$mode" == "ipv4" ]]; then
-            CURRENT_LINK_VIEW_MODE="ipv4"
-            link="$(build_vless_enc_share_link 2>/dev/null || jq -r '.vless_encryption.link // empty' "$STATE_FILE" 2>/dev/null)"
-            _export_emit_link "$link"
+    _export_emit_profile_links() {
+        local tag="$1" state_key="$2" link scope
+        shift 2
+        inbound_exists "$tag" || return 0
+        if [[ -n "$custom" ]]; then
+            # A custom endpoint can be an external relay/NAT address; its family
+            # need not match the listener or a locally detected public address.
+            link="$("$@" 2>/dev/null)" && _export_emit_link "$link"
         else
-            # dual: prefer IPv4, also emit IPv6 when available
-            CURRENT_LINK_VIEW_MODE="ipv4"
-            link="$(build_vless_enc_share_link 2>/dev/null || jq -r '.vless_encryption.link // empty' "$STATE_FILE" 2>/dev/null)"
-            if [[ -z "$link" ]]; then
-                CURRENT_LINK_VIEW_MODE="dual"
-                link="$(build_vless_enc_share_link 2>/dev/null || jq -r '.vless_encryption.link // empty' "$STATE_FILE" 2>/dev/null)"
+            scope="$(inbound_listen_scope "$tag" "$state_key")"
+            if [[ "$mode" != "ipv6" && -n "$IPV4_HOST" && "$scope" != "ipv6" ]]; then
+                CURRENT_LINK_VIEW_MODE="ipv4"
+                link="$("$@" 2>/dev/null)" && _export_emit_link "$link"
             fi
-            _export_emit_link "$link"
-            if should_print_ipv6_link "dual" "$VLESS_TAG" "vless_encryption"; then
+            if should_print_ipv6_link "$mode" "$tag" "$state_key"; then
                 CURRENT_LINK_VIEW_MODE="ipv6"
-                link="$(build_vless_enc_share_link 2>/dev/null || true)"
-                _export_emit_link "$link"
+                link="$("$@" 2>/dev/null)" && _export_emit_link "$link"
             fi
         fi
-        CURRENT_LINK_VIEW_MODE="$saved_mode"
-    fi
+        return 0
+    }
 
-    # Reality
-    if inbound_exists "$REALITY_TAG"; then
-        link="$(build_reality_share_link 2>/dev/null || jq -r ".${REALITY_STATE_KEY}.link // empty" "$STATE_FILE" 2>/dev/null)"
-        _export_emit_link "$link"
-    fi
-
-    # XHTTP + FinalMask
-    if inbound_exists "$VLESS_XHTTP_FM_TAG"; then
-        link="$(build_vless_xhttp_finalmask_share_link 2>/dev/null || jq -r ".${VLESS_XHTTP_FM_STATE_KEY}.link // empty" "$STATE_FILE" 2>/dev/null)"
-        _export_emit_link "$link"
-    fi
-
-    # ENC + FinalMask (sudoku)
-    if inbound_exists "$VLESS_ENC_FM_TAG"; then
-        link="$(build_vless_enc_finalmask_share_link 2>/dev/null || jq -r ".${VLESS_ENC_FM_STATE_KEY}.link // empty" "$STATE_FILE" 2>/dev/null)"
-        _export_emit_link "$link"
-    fi
-
-    # ENC + XHTTP
-    if inbound_exists "$VLESS_ENC_XHTTP_TAG"; then
-        link="$(build_vless_enc_xhttp_share_link 2>/dev/null || jq -r ".${VLESS_ENC_XHTTP_STATE_KEY}.link // empty" "$STATE_FILE" 2>/dev/null)"
-        _export_emit_link "$link"
-    fi
-
-    # Advanced profiles
-    local kind
+    _export_emit_profile_links "$SS_TAG" ss2022 build_simple_proxy_share_link "$SS_TAG" ss
+    _export_emit_profile_links "$VLESS_TAG" vless_encryption build_vless_enc_share_link
+    _export_emit_profile_links "$REALITY_TAG" "$REALITY_STATE_KEY" build_reality_share_link
+    _export_emit_profile_links "$VLESS_XHTTP_FM_TAG" "$VLESS_XHTTP_FM_STATE_KEY" build_vless_xhttp_finalmask_share_link
+    _export_emit_profile_links "$VLESS_ENC_FM_TAG" "$VLESS_ENC_FM_STATE_KEY" build_vless_enc_finalmask_share_link
+    _export_emit_profile_links "$VLESS_ENC_XHTTP_TAG" "$VLESS_ENC_XHTTP_STATE_KEY" build_vless_enc_xhttp_share_link
     for kind in xhttp-reality enc-reality fullstack; do
-        if inbound_exists "$(advanced_profile_tag "$kind" 2>/dev/null)"; then
-            link="$(build_advanced_share_link "$kind" 2>/dev/null || jq -r ".$(advanced_profile_state_key "$kind").link // empty" "$STATE_FILE" 2>/dev/null)"
-            _export_emit_link "$link"
-        fi
+        _export_emit_profile_links "$(advanced_profile_tag "$kind")" "$(advanced_profile_state_key "$kind")" build_advanced_share_link "$kind"
     done
-
-    # Hysteria2
-    if inbound_exists "$HY2_TAG"; then
-        link="$(build_hysteria2_share_link 2>/dev/null || jq -r ".${HY2_STATE_KEY}.link // empty" "$STATE_FILE" 2>/dev/null)"
-        _export_emit_link "$link"
-    fi
-
-    # SOCKS5
-    local socks_in sp su sw
-    socks_in="$(jq -c --arg tag "$SOCKS_TAG" '.inbounds[]? | select(.tag == $tag)' "$CONFIG_FILE" 2>/dev/null)"
-    if [[ -n "$socks_in" ]]; then
-        sp="$(echo "$socks_in" | jq -r '.port')"
-        su="$(echo "$socks_in" | jq -r '.settings.accounts[0].user')"
-        sw="$(echo "$socks_in" | jq -r '.settings.accounts[0].pass')"
-        if [[ -n "$IPV4_HOST" && "$mode" != "ipv6" ]]; then
-            _export_emit_link "socks5://${su}:${sw}@${IPV4_HOST}:${sp}"
-        fi
-        if should_print_ipv6_link "$mode" "$SOCKS_TAG" "socks5"; then
-            _export_emit_link "socks5://${su}:${sw}@${IPV6_HOST}:${sp}"
-        fi
-    fi
+    _export_emit_profile_links "$HY2_TAG" "$HY2_STATE_KEY" build_hysteria2_share_link
+    _export_emit_profile_links "$SOCKS_TAG" socks5 build_simple_proxy_share_link "$SOCKS_TAG" socks5
 
     if [[ "$count" -eq 0 ]]; then
-        err "[导出] 未找到可导出的分享链接（可能尚未安装任何协议）。"
+        err "[导出] 未找到可导出的分享链接，请检查协议状态与公网 endpoint。" >&2
         return 1
     fi
-    return 0
 }
 
 write_or_print_export() {

@@ -597,7 +597,7 @@ install_reality() {
             "port": ($port|tonumber),
             "protocol": "vless",
             "settings": {
-              "clients": $clients,
+              "users": $clients,
               "decryption": "none"
             },
             "streamSettings": {
@@ -608,7 +608,6 @@ install_reality() {
                 "show": false,
                 "xver": 0,
                 "minClientVer": $min_client_ver,
-                "spiderX": env.REALITY_JQ_SPIDER_X,
                 "shortIds": $short_ids,
                 "privateKey": $private_key,
                 "serverNames": [$sni]
@@ -616,6 +615,7 @@ install_reality() {
             },
             "sniffing": {
               "enabled": true,
+              "routeOnly": true,
               "destOverride": ["http", "tls"]
             }
           },
@@ -623,11 +623,11 @@ install_reality() {
             "tag": $defender_tag,
             "listen": "127.0.0.1",
             "port": ($defender_port|tonumber),
-            "protocol": "dokodemo-door",
+            "protocol": "tunnel",
             "settings": {
-              "port": 443,
-              "address": $sni,
-              "network": "tcp"
+              "rewritePort": 443,
+              "rewriteAddress": $sni,
+              "allowedNetwork": "tcp"
             },
             "sniffing": {
               "enabled": true,

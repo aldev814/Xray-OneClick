@@ -4,11 +4,11 @@ Xray-OneClick 是基于 **Xray-core** 的多协议一键部署脚本，适合在
 
 脚本支持 Shadowsocks 2022、VLESS Encryption、VLESS TCP REALITY、VLESS Encryption + XHTTP + FinalMask、VLESS Encryption + XHTTP、VLESS Encryption + FinalMask（sudoku）、SOCKS5、Hysteria2，以及高级协议组合与 Tunnel 中转管理。默认带基础安全屏蔽、配置备份、服务诊断、配置导出、Xray-core 升级和安全卸载能力，并提供 stable / prerelease 两条 Xray-core 通道。
 
-当前版本：**1.1.30**（与 `VERSION` / `ike version` 一致）
+当前版本：**1.1.31**（与 `VERSION` / `ike version` 一致）
 
 状态：正式版
 
-本次版本：1.1.30 针对 **64MB 极限低内存容器（Podman / Docker / Alpine）** 进行了深度优化：下载临时目录智能避开 tmpfs 内存盘（改用 /var/tmp）、按需精准解压并**立即删除 25MB+ 压缩包**、以 mv 替换 cp 杜绝多重副本占用，并在服务模板中注入 Go 运行时内存限制（GOMEMLIMIT=35MiB 等），彻底解决低内存容器解压 Xray 时爆内存崩溃的问题。同时将中国大陆直连屏蔽（`cnblock`）恢复为默认关闭（off），大幅降低小内存机器的常驻内存开销。
+本次版本：1.1.31 针对 **64MB 极限低内存容器（Podman / Docker / Alpine）** 进行了深度优化：下载临时目录智能避开 tmpfs 内存盘（改用 /var/tmp）、按需精准解压并**立即删除 25MB+ 压缩包**、以 mv 替换 cp 杜绝多重副本占用，并在服务模板中注入 Go 运行时内存限制（GOMEMLIMIT=35MiB 等），彻底解决低内存容器解压 Xray 时爆内存崩溃的问题。同时将中国大陆直连屏蔽（`cnblock`）恢复为默认关闭（off），大幅降低小内存机器的常驻内存开销。
 
 说明：1.1.23 在本仓库魔改特性基础上合并了上游 ike-sh 的全量审计修复（REALITY `minClientVer: 0.0.0`、事务/原子写入、公网 Endpoint 探测、供应链 digest 校验、Docker 测试套件、移除 sb/sing-box 遗留等）。本仓库保留：`ike export links` / `ike links` 直接输出分享 URI、菜单 19 默认开启增强安全屏蔽、Reality 链接 fingerprint 默认 `firefox`、仓库地址统一为 `aldev814/Xray-OneClick`。
 
@@ -207,6 +207,8 @@ ike export links
 ike links
 ike links ipv4
 ```
+
+`ike export links dual` 按当前监听配置导出可用的 IPv4/IPv6 链接。设置了自定义 endpoint 时，各协议统一使用该入口及其外部端口，每个协议只输出一次；请确保对应的 NAT/中转映射已经配置。导出会重新构建链接，不使用可能已过期的 state 缓存链接。
 
 `doctor` 用于检查环境、配置和状态；`smoke` 用于服务侧快速排障。`smoke` 默认不会重启服务，只有加 `--restart` 时才会重启：
 
@@ -822,6 +824,10 @@ ike migrate --dry-run
 ike migrate
 ```
 
+当前迁移会为本脚本生成且已启用嗅探的 VLESS 入站补齐 `sniffing.routeOnly: true`。嗅探域名仍用于路由，连接保留客户端请求的目标，避免链式代理中内层 REALITY 的伪装 SNI 覆盖落地地址。缺少 REALITY target/dest 时中止迁移；迁移后校验配置，失败恢复 config/state。仅升级安装器不会改写已有配置；迁移成功后执行 `ike service restart` 生效。
+
+迁移同时将用户列表、Tunnel 转发字段和 FinalMask 分片参数转换为[官方全量文档](https://xtls.github.io/llms-full.txt)使用的格式，移除 REALITY 服务端的 `spiderX`；客户端分享链接仍保留对应的 `spx` 参数。
+
 同协议重复部署会覆盖同 tag 配置，不同协议互不影响。写入配置前脚本会自动备份，配置应用失败时会尝试回滚。
 
 ## 卸载与清理
@@ -899,3 +905,11 @@ ike xhttp install --finalmask off
 ## 安全声明
 
 本项目仅供学习、研究和合法网络用途。请遵守所在地法律法规、服务商条款和网络使用规范。使用本脚本产生的任何后果由使用者自行承担。
+
+### 操作锁与升级一致性（1.1.31）
+
+`ike upgrade` 先将目标 ref 解析为固定 commit SHA，解析失败则停止；版本文件、安装入口和所有模块均来自该提交。模块清单取自目标 `install.sh`，替换前执行语法、版本和完整加载检查；部署目录的 `COMMIT` 文件记录来源提交。
+
+菜单及会写入配置或 state 的命令使用 `/run/xray-oneclick.lock` 互斥。`view`、链接导出和部分 `show` 命令会规范化 state，因此也参与互斥。版本、服务状态等纯查询仍可运行。锁在正常退出和 INT/TERM 时释放；如进程被 SIGKILL 或系统异常终止，确认没有 ike 操作后再手动清理残留锁。测试或特殊环境可用 `XRAY_ONECLICK_LOCK_DIR` 指定锁目录。
+
+配置备份旁的 `.d/` 目录保存对应 state 快照，包含敏感信息，应与备份一起保护和保留。自动回滚优先使用当前操作明确记录的备份；旧备份仍兼容。本轮快照覆盖 config/state，不包含核心二进制、服务文件和证书的完整事务。

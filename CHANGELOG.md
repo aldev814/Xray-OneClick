@@ -1,6 +1,18 @@
 # Changelog
 
 ## Unreleased
+- **官方文档字段同步**：VLESS/Hysteria/SOCKS 用户列表使用 `users`；Tunnel 使用 `rewriteAddress/rewritePort/allowedNetwork`；FinalMask 分片使用 `lengths/delays` 数组；识别 `V6Only` 并移除 REALITY 服务端的 `spiderX`。查看、导出、密钥重置兼容旧字段，`ike migrate` 同步转换配置和 FinalMask state。
+- **诊断报告脱敏**：报告中的分享链接统一脱敏，补齐 SOCKS5 URI 识别。
+- **链式代理目标保留**：所有 VLESS 入站的嗅探增加 `routeOnly: true`，避免将内层 TLS/REALITY 的 SNI 覆盖为实际连接目标；`ike migrate` 可为已启用嗅探的本脚本 VLESS 入站补齐该设置。
+- **迁移完整性**：缺少 REALITY target/dest 时中止迁移并保留原配置，避免 jq 的 `empty` 静默删除入站；迁移后校验配置，失败恢复 config/state。
+- **分享链接准确性**：导出使用公网探测，所有协议支持双栈导出并遵循自定义入口和外部端口；隔离菜单残留参数，编码 SOCKS 凭据，停止回退到地址可能过期的缓存链接。
+- **监听识别**：按当前配置识别通配监听与 `v6only`，避免历史 state 将双栈入站误判为仅 IPv4。
+
+## 1.1.31
+- **自升级一致性**：解析目标 commit SHA 后，从同一提交下载版本、入口与模块；按目标入口的模块清单部署，支持新增/删除模块，并在替换前验证完整加载，记录部署 `COMMIT`。
+- **操作互斥**：菜单及会修改配置/state 的 CLI 共用操作锁，正常退出或 INT/TERM 时释放；纯版本、服务状态等查询仍可并行。
+- **精确回滚**：配置备份同时保存配套 state，失败优先恢复本次操作的明确快照，避免误用时间更新的无关备份；快照丢失时停止恢复。
+- **文档与测试**：修正帮助中的 cnblock 默认值；增加升级失败注入、目标模块变更、精确快照和并发锁行为测试。
 
 ## 1.1.30
 - **64MB 极限低内存容器支持**：

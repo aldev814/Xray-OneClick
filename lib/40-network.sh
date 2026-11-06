@@ -46,10 +46,10 @@ protocol_listen_scope() {
         "")
             printf '%s' "unknown"
             ;;
-        "0.0.0.0" | 127.*)
+        127.*)
             printf '%s' "ipv4"
             ;;
-        "::" | "[::]")
+        "0.0.0.0" | "::" | "[::]")
             printf '%s' "dual"
             ;;
         *:*)
@@ -66,13 +66,18 @@ protocol_listen_scope() {
 
 config_inbound_listen_scope() {
     local tag="$1"
-    local listen
+    local listen v6only
 
     [[ -f "$CONFIG_FILE" ]] || {
         printf '%s' "unknown"
         return 0
     }
-    listen="$(jq -r --arg tag "$tag" '.inbounds[]? | select(.tag == $tag).listen // empty' "$CONFIG_FILE" 2>/dev/null | head -n 1)"
+    listen="$(jq -r --arg tag "$tag" '.inbounds[]? | select(.tag == $tag) | .listen // "0.0.0.0"' "$CONFIG_FILE" 2>/dev/null | head -n 1)"
+    v6only="$(jq -r --arg tag "$tag" '.inbounds[]? | select(.tag == $tag) | (.streamSettings.sockopt // {}) | if has("V6Only") then .V6Only else (.v6only // false) end' "$CONFIG_FILE" 2>/dev/null | head -n 1)"
+    if [[ "$v6only" == "true" && ( "$listen" == "0.0.0.0" || "$listen" == "::" || "$listen" == "[::]" ) ]]; then
+        printf '%s' "ipv6"
+        return 0
+    fi
     protocol_listen_scope "$listen"
 }
 
@@ -86,13 +91,22 @@ state_listen_scope() {
     printf '%s' "$scope"
 }
 
-inbound_supports_ipv6() {
+inbound_listen_scope() {
     local tag="$1"
     local state_key="${2:-}"
     local scope
 
-    scope="$(state_listen_scope "$state_key" 2>/dev/null || true)"
-    [[ -n "$scope" ]] || scope="$(config_inbound_listen_scope "$tag")"
+    # The active config takes precedence over historical installer metadata.
+    scope="$(config_inbound_listen_scope "$tag")"
+    if [[ "$scope" == "unknown" ]]; then
+        scope="$(state_listen_scope "$state_key" 2>/dev/null || true)"
+    fi
+    printf '%s' "${scope:-unknown}"
+}
+
+inbound_supports_ipv6() {
+    local scope
+    scope="$(inbound_listen_scope "$1" "${2:-}")"
     [[ "$scope" == "ipv6" || "$scope" == "dual" ]]
 }
 
@@ -124,6 +138,11 @@ link_endpoint_for_tag() {
     local tag="$2"
     local state_key="${3:-}"
     local mode="${CURRENT_LINK_VIEW_MODE:-dual}"
+
+    if [[ -n "$(endpoint_custom_value)" ]]; then
+        split_endpoint_for_link "$port"
+        return $?
+    fi
 
     case "$mode" in
         ipv6)

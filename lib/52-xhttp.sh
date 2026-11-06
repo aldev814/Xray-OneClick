@@ -88,8 +88,8 @@ build_finalmask_custom_json() {
         err "[FinalMask] delay 必须是 0-1000 内的整数或 A-B 范围。"
         return 1
     }
-    validate_finalmask_range "$max_split" 1 20 || {
-        err "[FinalMask] maxSplit 必须是 1-20 内的整数或 A-B 范围。"
+    validate_finalmask_range "$max_split" 0 20 || {
+        err "[FinalMask] maxSplit 必须是 0-20 内的整数或 A-B 范围（0 不限制）。"
         return 1
     }
     jq -cn --arg packets "$packets" --arg length "$length" --arg delay "$delay" --arg max_split "$max_split" '{
@@ -98,8 +98,8 @@ build_finalmask_custom_json() {
           type: "fragment",
           settings: {
             packets: $packets,
-            length: $length,
-            delay: $delay,
+            lengths: [$length],
+            delays: [$delay],
             maxSplit: $max_split
           }
         }
@@ -111,11 +111,37 @@ validate_finalmask_json() {
     local json="$1"
 
     [[ -n "$json" ]] || return 1
-    jq -e 'type == "object" and ((has("tcp") | not) or (.tcp | type == "array"))' >/dev/null 2>&1 <<<"$json"
+    normalize_finalmask_json "$json" | jq -e '
+      def valid_range:
+        if type == "number" then . >= 0 and floor == .
+        elif type == "string" and test("^[0-9]+(-[0-9]+)?$") then
+          split("-") | map(tonumber) | .[0] <= .[-1]
+        else false end;
+      type == "object" and
+      all(.tcp?, .udp?; . == null or type == "array") and
+      all(.tcp[]? | select(.type == "fragment");
+        (.settings.lengths | type == "array" and length > 0 and all(.[]; valid_range)) and
+        (.settings.lengths[-1] | tostring | split("-")[0] | tonumber > 0) and
+        (.settings.delays | type == "array" and length > 0 and all(.[]; valid_range)) and
+        ((.settings | has("maxSplit") | not) or (.settings.maxSplit | valid_range)))
+    ' >/dev/null 2>&1
+}
+
+normalize_finalmask_json() {
+    jq -c '
+      walk(if type == "object" and .type == "fragment" and (.settings | type) == "object" then
+        .settings |= (
+          (if has("lengths") and has("length") and .lengths != [.length] then error("Conflicting fragment length/lengths") else . end) |
+          (if has("delays") and has("delay") and .delays != [.delay] then error("Conflicting fragment delay/delays") else . end) |
+          (if has("lengths") then . elif has("length") then .lengths = [.length] else . end) |
+          (if has("delays") then . elif has("delay") then .delays = [.delay] else . end) |
+          del(.length, .delay))
+      else . end)
+    ' <<<"$1"
 }
 
 canonical_json() {
-    jq -cS . 2>/dev/null <<<"$1"
+    normalize_finalmask_json "$1" | jq -cS . 2>/dev/null
 }
 
 finalmask_summary_from_json() {
@@ -124,7 +150,7 @@ finalmask_summary_from_json() {
 
     summary="$(jq -r '
       if (.tcp? | type) == "array" and (.tcp[0]? // null) != null then
-        (.tcp[0] | "fragment \(.settings.packets // "unknown") length=\(.settings.length // "unknown") delay=\(.settings.delay // "unknown") maxSplit=\(.settings.maxSplit // "unknown")")
+        (.tcp[0] | "\(.type) \(.settings.packets // "unknown") lengths=\(.settings.lengths // [.settings.length]) delays=\(.settings.delays // [.settings.delay]) maxSplit=\(.settings.maxSplit // "unknown")")
       else
         "custom/raw-json"
       end
@@ -204,7 +230,7 @@ build_finalmask_json() {
             err "[FinalMask] --finalmask-json 不是可用的 FinalMask JSON。"
             return 1
         }
-        json="$(jq -c . <<<"$FINALMASK_JSON_REQUEST")" || return 1
+        json="$(normalize_finalmask_json "$FINALMASK_JSON_REQUEST")" || return 1
         set_finalmask_metadata_from_json "$json" "raw-json" "raw-json"
         printf '%s' "$json"
         return 0
@@ -475,6 +501,7 @@ configure_vless_xhttp_finalmask() {
 encode_finalmask_for_share_link() {
     local finalmask_json="$1"
 
+    finalmask_json="$(normalize_finalmask_json "$finalmask_json")" || return 1
     json_url_encode "$finalmask_json"
 }
 
@@ -639,7 +666,7 @@ install_vless_xhttp_finalmask() {
           "port": ($port|tonumber),
           "protocol": "vless",
           "settings": {
-            "clients": [
+            "users": [
               {
                 "id": $uuid,
                 "email": "xhttp-finalmask@xray"
@@ -656,6 +683,7 @@ install_vless_xhttp_finalmask() {
           },
           "sniffing": {
             "enabled": true,
+            "routeOnly": true,
             "destOverride": ["http", "tls"]
           }
         } | if $finalmask_enabled == "true" then
@@ -986,7 +1014,7 @@ install_vless_enc_xhttp() {
           "port": ($port|tonumber),
           "protocol": "vless",
           "settings": {
-            "clients": [
+            "users": [
               {
                 "id": $uuid,
                 "email": "enc-xhttp@xray"
@@ -1003,6 +1031,7 @@ install_vless_enc_xhttp() {
           },
           "sniffing": {
             "enabled": true,
+            "routeOnly": true,
             "destOverride": ["http", "tls"]
           }
         }]

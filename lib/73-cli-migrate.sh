@@ -17,17 +17,50 @@ normalize_config_schema() {
 
     command -v jq >/dev/null 2>&1 || return 1
     tmp="$(config_temp_file)" || return 1
-    if ! jq --arg min_client_ver "$REALITY_MIN_CLIENT_VERSION" '
+    if ! jq --arg min_client_ver "$REALITY_MIN_CLIENT_VERSION" \
+      --argjson proxy_tags "$(jq -cn --args '$ARGS.positional' \
+        "$VLESS_TAG" "$REALITY_TAG" "$VLESS_XHTTP_FM_TAG" \
+        "$VLESS_XHTTP_REALITY_TAG" "$VLESS_ENC_REALITY_TAG" \
+        "$VLESS_FULLSTACK_TAG" "$VLESS_ENC_FM_TAG" "$VLESS_ENC_XHTTP_TAG")" '
+      def rename_field($old; $new):
+        if has($old) then
+          if has($new) and .[$new] != .[$old] then
+            error("Conflicting config fields: " + $old + " / " + $new)
+          else .[$new] = .[$old] | del(.[$old]) end
+        else . end;
+      def normalize_protocol_fields:
+        if (.settings | type) == "object" then
+          if .protocol == "vless" or .protocol == "hysteria" then
+            .settings |= rename_field("clients"; "users")
+          elif .protocol == "socks" then
+            .settings |= rename_field("accounts"; "users")
+          elif .protocol == "tunnel" or .protocol == "dokodemo-door" then
+            .settings |= (rename_field("address"; "rewriteAddress") |
+              rename_field("port"; "rewritePort") | rename_field("network"; "allowedNetwork"))
+          else . end
+        else . end;
       def normalize_reality_target:
         if (.streamSettings? | type) == "object" and .streamSettings.security == "reality" and (.streamSettings.realitySettings? | type) == "object" then
-          .streamSettings.realitySettings.target = (.streamSettings.realitySettings.target // .streamSettings.realitySettings.dest // empty) |
+          (.streamSettings.realitySettings.target // .streamSettings.realitySettings.dest) as $target |
+          if $target == null or $target == "" then
+            error("REALITY inbound is missing target/dest: " + (.tag // "untagged"))
+          else .streamSettings.realitySettings.target = $target end |
           .streamSettings.realitySettings.minClientVer = (.streamSettings.realitySettings.minClientVer // $min_client_ver) |
-          del(.streamSettings.realitySettings.dest)
+          del(.streamSettings.realitySettings.dest, .streamSettings.realitySettings.spiderX)
+        else
+          .
+        end;
+      # Preserve the requested destination when relaying nested TLS/REALITY.
+      # Only migrate managed VLESS listeners whose sniffing is already enabled.
+      def normalize_proxy_sniffing:
+        if .protocol == "vless" and (.tag as $tag | $proxy_tags | index($tag)) != null
+          and .sniffing.enabled == true then
+          .sniffing.routeOnly = true
         else
           .
         end;
       if (.inbounds? | type) == "array" then
-        .inbounds = [.inbounds[] | normalize_reality_target]
+        .inbounds = [.inbounds[] | normalize_protocol_fields | normalize_reality_target | normalize_proxy_sniffing]
       else
         .
       end
@@ -35,6 +68,15 @@ normalize_config_schema() {
         rm -f "$tmp"
         return 1
     fi
+    local normalized
+    normalized="$(normalize_finalmask_json "$(cat "$tmp")")" || {
+        rm -f "$tmp"
+        return 1
+    }
+    printf '%s\n' "$normalized" | jq . >"$tmp" || {
+        rm -f "$tmp"
+        return 1
+    }
     if cmp -s "$CONFIG_FILE" "$tmp"; then
         rm -f "$tmp"
         diag_info "配置 schema 无需迁移"
@@ -50,6 +92,21 @@ normalize_config_schema() {
         return 1
     }
     rm -f "$tmp"
+}
+
+migrate_finalmask_state() {
+    local dry_run="${1:-false}" tmp
+    [[ -f "$STATE_FILE" ]] || return 0
+    tmp="$(state_temp_file)" || return 1
+    if ! normalize_finalmask_json "$(cat "$STATE_FILE")" | jq . >"$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
+    if [[ "$dry_run" == "true" ]] || cmp -s "$STATE_FILE" "$tmp"; then
+        rm -f "$tmp"
+        return 0
+    fi
+    mv "$tmp" "$STATE_FILE" || { rm -f "$tmp"; return 1; }
 }
 
 run_migrate_command() {
@@ -86,7 +143,7 @@ run_migrate_command() {
         [[ "$dry_run" == "true" ]] || restore_migration_backup >/dev/null 2>&1 || true
         return 1
     }
-    migrate_old_state "$dry_run" || {
+    if ! migrate_finalmask_state "$dry_run" || ! migrate_old_state "$dry_run"; then
         err "[迁移] state 迁移失败。"
         if [[ "$dry_run" != "true" ]]; then
             if restore_migration_backup; then
@@ -96,7 +153,12 @@ run_migrate_command() {
             fi
         fi
         return 1
-    }
+    fi
+    if [[ "$dry_run" != "true" ]] && ! validate_config_file; then
+        err "[迁移] 配置校验失败，正在恢复迁移前的 config/state。"
+        restore_migration_backup || err "[迁移] 自动恢复失败，请检查迁移备份。"
+        return 1
+    fi
 }
 
 create_purge_backup() {

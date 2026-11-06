@@ -147,12 +147,12 @@ doctor_reality() {
     port="$(echo "$r_in" | jq -r '.port // empty')"
     defender_port="$(echo "$d_in" | jq -r '.port // empty')"
     sni="$(echo "$r_in" | jq -r '.streamSettings.realitySettings.serverNames[0] // empty')"
-    flow="$(echo "$r_in" | jq -r '.settings.clients[0].flow // empty')"
+    flow="$(echo "$r_in" | jq -r '(.settings.users // .settings.clients)[0].flow // empty')"
     target="$(echo "$r_in" | jq -r '.streamSettings.realitySettings.target // .streamSettings.realitySettings.dest // empty')"
     short_count="$(echo "$r_in" | jq -r '.streamSettings.realitySettings.shortIds | length')"
 
     echo "$r_in" | jq -e '.protocol == "vless" and .streamSettings.network == "tcp" and .streamSettings.security == "reality"' >/dev/null && diag_ok "Reality inbound 协议/传输/安全类型正确" || diag_fail "Reality inbound 协议/传输/安全类型异常"
-    echo "$r_in" | jq -e '(.settings.clients[0].id // "") != ""' >/dev/null && diag_ok "Reality UUID 存在" || diag_fail "Reality UUID 缺失"
+    echo "$r_in" | jq -e '((.settings.users // .settings.clients)[0].id // "") != ""' >/dev/null && diag_ok "Reality UUID 存在" || diag_fail "Reality UUID 缺失"
     if [[ "$flow" == "$REALITY_FLOW_DEFAULT" ]]; then
         diag_ok "Reality flow 一致：${REALITY_FLOW_DEFAULT}"
     elif [[ -z "$flow" ]]; then
@@ -178,7 +178,7 @@ doctor_reality() {
     [[ -n "$sni" ]] && diag_ok "Reality serverNames 已配置" || diag_fail "Reality serverNames 缺失"
     ((short_count == 8)) && diag_ok "Reality shortIds 数量为 8" || diag_warn "Reality shortIds 数量为 ${short_count}"
     [[ "$target" == "127.0.0.1:${defender_port}" ]] && diag_ok "Reality target 指向 defender: ${target}" || diag_fail "Reality target 异常: ${target}"
-    echo "$d_in" | jq -e --arg sni "$sni" '.listen == "127.0.0.1" and .protocol == "dokodemo-door" and .settings.address == $sni and .settings.port == 443 and .settings.network == "tcp"' >/dev/null && diag_ok "Reality defender 配置正确" || diag_fail "Reality defender 配置异常"
+    echo "$d_in" | jq -e --arg sni "$sni" '.listen == "127.0.0.1" and (.protocol == "tunnel" or .protocol == "dokodemo-door") and (.settings.rewriteAddress // .settings.address) == $sni and (.settings.rewritePort // .settings.port) == 443 and (.settings.allowedNetwork // .settings.network) == "tcp"' >/dev/null && diag_ok "Reality defender 配置正确" || diag_fail "Reality defender 配置异常"
     doctor_reality_routing "$sni"
     doctor_reality_state
     doctor_reality_port "$port" "$defender_port"
@@ -252,14 +252,14 @@ doctor_advanced_profile() {
     echo "$in" | jq -e --arg network "$network" '.protocol == "vless" and .streamSettings.network == $network and .streamSettings.security == "reality"' >/dev/null &&
         diag_ok "inbound 协议/传输/REALITY 配置正确" ||
         diag_fail "inbound 协议/传输/REALITY 配置异常"
-    echo "$in" | jq -e '(.settings.clients[0].id // "") != ""' >/dev/null && diag_ok "UUID 存在" || diag_fail "UUID 缺失"
+    echo "$in" | jq -e '((.settings.users // .settings.clients)[0].id // "") != ""' >/dev/null && diag_ok "UUID 存在" || diag_fail "UUID 缺失"
     echo "$in" | jq -e '(.streamSettings.realitySettings.privateKey // "") != ""' >/dev/null && diag_ok "privateKey 已写入服务端配置（默认不输出值）" || diag_fail "privateKey 缺失"
     target="$(echo "$in" | jq -r '.streamSettings.realitySettings.target // .streamSettings.realitySettings.dest // empty')"
     echo "$in" | jq -e '(.streamSettings.realitySettings.serverNames[0] // "") != "" and ((.streamSettings.realitySettings.target // .streamSettings.realitySettings.dest // "") | endswith(":443"))' >/dev/null &&
         diag_ok "REALITY target/serverNames 已配置" ||
         diag_fail "REALITY target/serverNames 配置异常"
     echo "$in" | jq -e '(.streamSettings.realitySettings.shortIds | length) == 8' >/dev/null && diag_ok "shortIds 数量为 8" || diag_warn "shortIds 数量不是 8"
-    config_flow="$(echo "$in" | jq -r '.settings.clients[0].flow // "none"')"
+    config_flow="$(echo "$in" | jq -r '(.settings.users // .settings.clients)[0].flow // "none"')"
     [[ -n "$config_flow" ]] || config_flow="$REALITY_FLOW_NONE"
 
     if advanced_profile_has_xhttp "$kind"; then

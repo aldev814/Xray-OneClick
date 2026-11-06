@@ -62,7 +62,7 @@ install_socks5() {
           "protocol": "socks",
           "settings": {
             "auth": "password",
-            "accounts": [{"user": $user, "pass": $pass}],
+            "users": [{"user": $user, "pass": $pass}],
             "udp": true
           }
         }]

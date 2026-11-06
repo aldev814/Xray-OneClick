@@ -300,9 +300,9 @@ probe_tunnel_protocol() {
       "port": 9,
       "protocol": "tunnel",
       "settings": {
-        "address": "127.0.0.1",
-        "port": 9,
-        "network": "tcp"
+        "rewriteAddress": "127.0.0.1",
+        "rewritePort": 9,
+        "allowedNetwork": "tcp"
       }
     }
   ],
@@ -312,7 +312,7 @@ probe_tunnel_protocol() {
 }
 JSON
 
-    if "$BIN_PATH" run -test -c "$tmp" >/dev/null 2>&1; then
+    if "$BIN_PATH" run -test -format json -c "$tmp" >/dev/null 2>&1; then
         TUNNEL_PROTOCOL="tunnel"
     else
         TUNNEL_PROTOCOL="dokodemo-door"
@@ -426,9 +426,9 @@ forward_rule_lines() {
         .tag,
         (.listen // "0.0.0.0"),
         (.port | tostring),
-        (.settings.address // ""),
-        (.settings.port | tostring),
-        (.settings.network // "tcp"),
+        (.settings.rewriteAddress // .settings.address // ""),
+        ((.settings.rewritePort // .settings.port // .port) | tostring),
+        (.settings.allowedNetwork // .settings.network // "tcp"),
         (if (.settings.portMap // null) then "portMap" else "single" end)
       ] | join("\u001f")
     ' "$CONFIG_FILE" 2>/dev/null
@@ -635,9 +635,9 @@ load_forward_vars_from_tag() {
             .tag,
             (.listen // "0.0.0.0"),
             (.port | tostring),
-            (.settings.address // ""),
-            (.settings.port | tostring),
-            (.settings.network // "tcp"),
+            (.settings.rewriteAddress // .settings.address // ""),
+            ((.settings.rewritePort // .settings.port // .port) | tostring),
+            (.settings.allowedNetwork // .settings.network // "tcp"),
             (if (.settings.portMap // null) then "portMap" else "single" end),
             ((.settings.portMap // {}) | @json)
           ] | join("\u001f")
@@ -1025,10 +1025,10 @@ write_forward_config_from_vars() {
               "port": port_value($listen_port),
               "protocol": $protocol,
               "settings": {
-                "address": $target,
-                "port": ($target_port | tonumber),
+                "rewriteAddress": $target,
+                "rewritePort": ($target_port | tonumber),
                 "portMap": $port_map,
-                "network": $network
+                "allowedNetwork": $network
               }
             }
           else
@@ -1038,9 +1038,9 @@ write_forward_config_from_vars() {
               "port": ($listen_port | tonumber),
               "protocol": $protocol,
               "settings": {
-                "address": $target,
-                "port": ($target_port | tonumber),
-                "network": $network
+                "rewriteAddress": $target,
+                "rewritePort": ($target_port | tonumber),
+                "allowedNetwork": $network
               }
             }
           end;
@@ -1641,9 +1641,9 @@ export_forward_rules() {
                 group: "",
                 listen: ($in.listen // "0.0.0.0"),
                 listen_port: $in.port,
-                target: ($in.settings.address // ""),
-                target_port: $in.settings.port,
-                network: ($in.settings.network // "tcp"),
+                target: ($in.settings.rewriteAddress // $in.settings.address // ""),
+                target_port: ($in.settings.rewritePort // $in.settings.port // $in.port),
+                network: ($in.settings.allowedNetwork // $in.settings.network // "tcp"),
                 mode: (if any($root.routing.rules[]?; (.type == "field") and (.outboundTag == "direct") and (((.inboundTag // []) | if type == "array" then any(.[]; . == $in.tag) else false end))) then "relay" else "safe" end),
                 remark: "",
                 enabled: true

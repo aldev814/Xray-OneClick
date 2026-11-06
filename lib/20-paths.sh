@@ -128,3 +128,40 @@ remove_managed_tree() {
     esac
     rm -rf -- "$target"
 }
+
+# Commands that only inspect existing state may run alongside a writer.
+# view/export/protocol show currently normalize state, so they also take the lock.
+ike_command_needs_lock() {
+    [[ -n "${XRAY_ONECLICK_ENDPOINT:-}" ]] && return 0
+    case "${1:-}:${2:-}" in
+        logs:* | xray:version | xray: | config:path | config: | config:test | service:status | service: | service:logs | cnblock:status | cnblock:) return 1 ;;
+        safety:enhanced) [[ "${3:-status}" == "status" ]] && return 1 ;;
+    esac
+    return 0
+}
+
+ike_release_lock() {
+    [[ "${IKE_LOCK_HELD:-false}" == "true" && "${IKE_LOCK_OWNER:-}" == "$BASHPID" ]] || return 0
+    rm -f -- "${IKE_ACTIVE_LOCK}/pid"
+    rmdir -- "$IKE_ACTIVE_LOCK" 2>/dev/null || true
+    IKE_LOCK_HELD="false"
+}
+
+ike_acquire_lock() {
+    local lock_dir="${XRAY_ONECLICK_LOCK_DIR:-/run/xray-oneclick.lock}"
+    if ! mkdir -m 700 -- "$lock_dir" 2>/dev/null; then
+        err "[锁] 另一个 ike 操作正在运行，或无法创建锁: $lock_dir"
+        err "[提示] 若进程被强制终止，请确认没有 ike 进程后清理该锁目录。"
+        return 1
+    fi
+    IKE_ACTIVE_LOCK="$lock_dir"
+    IKE_LOCK_OWNER="$BASHPID"
+    IKE_LOCK_HELD="true"
+    trap 'ike_release_lock' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    printf '%s\n' "$BASHPID" >"${lock_dir}/pid" || {
+        ike_release_lock
+        return 1
+    }
+}

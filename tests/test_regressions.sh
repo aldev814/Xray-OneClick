@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 mkdir -p "${REPO_ROOT}/.tmp"
 TMP_DIR="$(mktemp -d "${REPO_ROOT}/.tmp/regressions.XXXXXX")"
+export XRAY_ONECLICK_LOCK_DIR="${TMP_DIR}/operation.lock"
 MOCK_BIN="${TMP_DIR}/bin"
 MOCK_CURL_LOG="${TMP_DIR}/curl.log"
 
@@ -29,7 +30,7 @@ test_migrate_dry_run_and_schema_upgrade() (
     STATE_FILE="${CONFIG_DIR}/installer-state.json"
     mkdir -p "$CONFIG_DIR"
     cat >"$CONFIG_FILE" <<'JSON'
-{"inbounds":[{"tag":"vless+tcp+reality","streamSettings":{"security":"reality","realitySettings":{"dest":"example.com:443"}}}],"outbounds":[]}
+{"inbounds":[{"tag":"vless+tcp+reality","protocol":"vless","sniffing":{"enabled":true,"destOverride":["http","tls"]},"streamSettings":{"security":"reality","realitySettings":{"dest":"example.com:443"}}},{"tag":"custom-vless","protocol":"vless","sniffing":{"enabled":true,"routeOnly":false}},{"tag":"vless-enc-in","protocol":"vless","sniffing":{"enabled":false}},{"tag":"vless-enc-xhttp-in","protocol":"vless"}],"outbounds":[]}
 JSON
     printf '%s\n' '{}' >"$STATE_FILE"
 
@@ -57,6 +58,16 @@ JSON
         fail "Reality 迁移未补 minClientVer"
     jq -e '.inbounds[0].streamSettings.realitySettings | has("dest") | not' "$CONFIG_FILE" >/dev/null ||
         fail "Reality 迁移后仍保留 dest"
+    jq -e '
+      .inbounds[0].sniffing == {enabled:true,routeOnly:true,destOverride:["http","tls"]} and
+      .inbounds[1].sniffing == {enabled:true,routeOnly:false} and
+      .inbounds[2].sniffing == {enabled:false} and
+      (.inbounds[3] | has("sniffing") | not)
+    ' "$CONFIG_FILE" >/dev/null || fail "嗅探迁移未保留原始目标或修改了自定义/禁用的嗅探配置"
+    local migrated_hash
+    migrated_hash="$(sha256sum "$CONFIG_FILE" | awk '{print $1}')"
+    normalize_config_schema false || fail "重复迁移失败"
+    assert_eq "$migrated_hash" "$(sha256sum "$CONFIG_FILE" | awk '{print $1}')" "迁移应幂等"
     echo "[OK] migrate dry-run 与 Reality schema 迁移"
 )
 
@@ -262,6 +273,7 @@ chmod +x "${MOCK_BIN}/ip"
 
 # shellcheck source=../install.sh
 source "${REPO_ROOT}/install.sh"
+ASSET_DIR="${TMP_DIR}/assets"
 
 test_public_ip_detection() {
     export PATH="${MOCK_BIN}:$PATH"

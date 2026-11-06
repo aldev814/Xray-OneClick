@@ -103,43 +103,78 @@ cnblock_user_set() {
 }
 
 backup_config() {
-    local backup_path
+    local backup_path snapshot_dir
 
+    IKE_CONFIG_BACKUP=""
+    IKE_CONFIG_BACKUP_SOURCE=""
     [[ -f "$CONFIG_FILE" ]] || return 0
     backup_path="$(mktemp "${CONFIG_FILE}.bak.$(date +%Y%m%d%H%M%S).XXXXXX")" || return 1
-    if ! cp -a "$CONFIG_FILE" "$backup_path"; then
+    snapshot_dir="${backup_path}.d"
+    if ! cp -a "$CONFIG_FILE" "$backup_path" || ! chmod 600 "$backup_path" ||
+        ! mkdir -m 700 "$snapshot_dir"; then
         rm -f "$backup_path"
         return 1
     fi
+    if [[ -f "$STATE_FILE" ]]; then
+        if ! cp -a "$STATE_FILE" "$snapshot_dir/state.json" || ! chmod 600 "$snapshot_dir/state.json"; then
+            rm -f "$backup_path" "$snapshot_dir/state.json"
+            rmdir "$snapshot_dir"
+            return 1
+        fi
+    else
+        touch "$snapshot_dir/state.absent" || return 1
+    fi
+    IKE_CONFIG_BACKUP="$backup_path"
+    IKE_CONFIG_BACKUP_SOURCE="$CONFIG_FILE"
 }
 
 restore_latest_config_backup() {
-    local latest_backup candidate
+    local latest_backup candidate tmp snapshot_dir bound="false"
 
     latest_backup=""
-    for candidate in "${CONFIG_FILE}.bak."*; do
-        [[ -f "$candidate" ]] || continue
-        if [[ -z "$latest_backup" || "$candidate" -nt "$latest_backup" ]]; then
-            latest_backup="$candidate"
-        fi
-    done
+    # Use this operation's exact snapshot. Never substitute an unrelated newer file.
+    if [[ "${IKE_CONFIG_BACKUP_SOURCE:-}" == "$CONFIG_FILE" && -n "${IKE_CONFIG_BACKUP:-}" ]]; then
+        latest_backup="$IKE_CONFIG_BACKUP"
+        bound="true"
+    else
+        # Compatibility with historical backups and explicit recovery calls.
+        for candidate in "${CONFIG_FILE}.bak."*; do
+            [[ -f "$candidate" ]] || continue
+            if [[ -z "$latest_backup" || "$candidate" -nt "$latest_backup" ]]; then
+                latest_backup="$candidate"
+            fi
+        done
+    fi
     if [[ -z "$latest_backup" || ! -f "$latest_backup" ]]; then
-        err "[回滚] 未找到可恢复的配置备份: ${CONFIG_FILE}.bak.*"
+        err "[回滚] 所需配置备份不存在，已停止恢复。"
         return 1
     fi
-
-    info "[回滚] 正在恢复最近备份: $latest_backup"
-    if ! cp -a "$latest_backup" "$CONFIG_FILE"; then
-        err "[回滚] 恢复配置文件失败。"
+    snapshot_dir="${latest_backup}.d"
+    if [[ "$bound" == "true" || -d "$snapshot_dir" ]] &&
+        [[ ! -f "$snapshot_dir/state.json" && ! -f "$snapshot_dir/state.absent" ]]; then
+        err "[回滚] 配套状态快照不完整，已停止恢复。"
         return 1
+    fi
+    info "[回滚] 正在恢复配置快照: $latest_backup"
+    tmp="$(config_temp_file)" || return 1
+    if ! cp -a "$latest_backup" "$tmp" || ! mv "$tmp" "$CONFIG_FILE"; then
+        rm -f "$tmp"
+        return 1
+    fi
+    if [[ -f "$snapshot_dir/state.json" ]]; then
+        tmp="$(state_temp_file)" || return 1
+        if ! cp -a "$snapshot_dir/state.json" "$tmp" || ! mv "$tmp" "$STATE_FILE"; then
+            rm -f "$tmp"
+            return 1
+        fi
+    elif [[ -f "$snapshot_dir/state.absent" ]]; then
+        rm -f "$STATE_FILE" || return 1
     fi
     ensure_config_security || return 1
-
     if ! validate_config_file; then
         err "[回滚] 恢复失败：备份配置校验未通过。"
         return 1
     fi
-
     ok "[回滚] 恢复成功，备份配置校验通过。"
 }
 
